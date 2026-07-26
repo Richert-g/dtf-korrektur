@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from src.models.report import ImageProcessingReport
-from src.utils.fs_utils import ensure_dir
+from src.utils.fs_utils import ensure_dir, retry_on_oserror
 
 _HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="de">
@@ -124,10 +124,14 @@ def write_html_report(report: ImageProcessingReport, output_path: Path) -> None:
         errors_html=_warnings_to_html(report.errors, "err", ""),
     )
     ensure_dir(output_path.parent)
-    output_path.write_text(html, encoding="utf-8")
+    retry_on_oserror(lambda: output_path.write_text(html, encoding="utf-8"), description=f"HTML-Bericht {output_path.name}")
+
+
+def _write_json(report: ImageProcessingReport, output_path: Path) -> None:
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(report.to_dict(), f, indent=2, ensure_ascii=False)
 
 
 def write_json_report(report: ImageProcessingReport, output_path: Path) -> None:
     ensure_dir(output_path.parent)
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(report.to_dict(), f, indent=2, ensure_ascii=False)
+    retry_on_oserror(lambda: _write_json(report, output_path), description=f"JSON-Bericht {output_path.name}")

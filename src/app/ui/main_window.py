@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -74,6 +74,7 @@ class MainWindow(QMainWindow):
         self.controller = MainController()
         self._analysis_thread = None
         self._analysis_worker = None
+        self._analysis_request_path: Path | None = None
         self._batch_thread = None
         self._batch_worker = None
         self._current_original_rgba: np.ndarray | None = None
@@ -116,8 +117,18 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(QLabel("Ausgewählte Dateien:"))
         self.file_list = QListWidget()
-        self.file_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.file_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         layout.addWidget(self.file_list, stretch=1)
+
+        list_btn_row = QHBoxLayout()
+        self.btn_remove_selected = QPushButton("Ausgewählte entfernen")
+        self.btn_clear_list = QPushButton("Liste leeren")
+        list_btn_row.addWidget(self.btn_remove_selected)
+        list_btn_row.addWidget(self.btn_clear_list)
+        layout.addLayout(list_btn_row)
+
+        delete_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Delete), self.file_list)
+        delete_shortcut.activated.connect(self._on_remove_selected_clicked)
 
         return panel
 
@@ -207,6 +218,8 @@ class MainWindow(QMainWindow):
         self.btn_select_folder.clicked.connect(self._on_select_folder_clicked)
         self.btn_select_output.clicked.connect(self._on_select_output_clicked)
         self.file_list.currentRowChanged.connect(self._on_file_row_changed)
+        self.btn_remove_selected.clicked.connect(self._on_remove_selected_clicked)
+        self.btn_clear_list.clicked.connect(self._on_clear_list_clicked)
         self.preset_combo.currentIndexChanged.connect(self._on_preset_changed)
         self.profile_combo.currentIndexChanged.connect(self._on_profile_changed)
         self.btn_import_profile.clicked.connect(self._on_import_profile_clicked)
@@ -246,6 +259,33 @@ class MainWindow(QMainWindow):
         self.output_label.setText(str(self.controller.output_dir) if self.controller.output_dir else "-")
         if files:
             self.file_list.setCurrentRow(0)
+
+    def _on_remove_selected_clicked(self) -> None:
+        selected_rows = sorted({self.file_list.row(item) for item in self.file_list.selectedItems()}, reverse=True)
+        if not selected_rows:
+            return
+        for row in selected_rows:
+            self.file_list.takeItem(row)
+            del self.controller.selected_files[row]
+        self._after_file_list_changed()
+
+    def _on_clear_list_clicked(self) -> None:
+        if self.file_list.count() == 0:
+            return
+        self.file_list.clear()
+        self.controller.selected_files = []
+        self._after_file_list_changed()
+
+    def _after_file_list_changed(self) -> None:
+        if not self.controller.selected_files:
+            self._analysis_request_path = None
+            self._current_original_rgba = None
+            self._current_result_rgba = None
+            self._current_softproof_rgba = None
+            self._current_removed_pixels_rgba = None
+            self._current_strengthened_pixels_rgba = None
+            self._set_view_modes([VIEW_ORIGINAL])
+            self.summary_text.setPlainText("Keine Dateien ausgewählt.")
 
     def _on_select_file_clicked(self) -> None:
         from src.config.defaults import SUPPORTED_IMPORT_FORMATS
@@ -295,11 +335,16 @@ class MainWindow(QMainWindow):
 
     def _start_analysis(self, path: Path) -> None:
         self.summary_text.setPlainText(f"Analysiere {path.name} …")
+        self._analysis_request_path = path
         self._analysis_thread, self._analysis_worker = run_analysis_in_thread(path, self.controller.settings)
-        self._analysis_worker.finished.connect(self._on_analysis_finished)
+        self._analysis_worker.finished.connect(
+            lambda result, loaded, error, p=path: self._on_analysis_finished(result, loaded, error, p)
+        )
         self._analysis_thread.start()
 
-    def _on_analysis_finished(self, result, loaded, error) -> None:
+    def _on_analysis_finished(self, result, loaded, error, requested_path: Path) -> None:
+        if requested_path != self._analysis_request_path:
+            return  # veraltetes Ergebnis einer inzwischen verlassenen Datei - ignorieren
         if error or result is None:
             self.summary_text.setPlainText(f"Fehler bei der Analyse: {error}")
             return

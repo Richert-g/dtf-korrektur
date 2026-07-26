@@ -14,6 +14,13 @@ from PySide6.QtCore import QObject, QThread, Signal
 from src.config.defaults import DEFAULT_MAX_PARALLEL_WORKERS, ProcessingSettings
 from src.models.report import BatchSummary, ImageProcessingReport
 
+# Siehe analysis_worker._KEEPALIVE: hält Thread UND Worker gemeinsam am
+# Leben, bis der Thread fertig ist - auch wenn der Aufrufer seine eigene
+# Referenz vorzeitig verliert bzw. überschreibt. Fehlt der Worker, läuft der
+# Thread für immer leer weiter statt fertigzuwerden; fehlt der Thread, bricht
+# Qt beim vorzeitigen Zerstören eines laufenden Threads hart ab.
+_KEEPALIVE: set[tuple[QThread, QObject]] = set()
+
 
 class BatchWorker(QObject):
     """Läuft in einem eigenen QThread und verarbeitet eine Liste von Dateien."""
@@ -93,4 +100,15 @@ def run_batch_in_thread(
     thread.started.connect(worker.run)
     worker.finished.connect(thread.quit)
     worker.cancelled.connect(thread.quit)
+
+    entry = (thread, worker)
+    _KEEPALIVE.add(entry)
+
+    def _cleanup() -> None:
+        _KEEPALIVE.discard(entry)
+        thread.deleteLater()
+        worker.deleteLater()
+
+    thread.finished.connect(_cleanup)
+
     return thread, worker

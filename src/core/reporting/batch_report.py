@@ -5,7 +5,12 @@ import json
 from pathlib import Path
 
 from src.models.report import BatchSummary
-from src.utils.fs_utils import ensure_dir
+from src.utils.fs_utils import ensure_dir, retry_on_oserror
+
+
+def _write_json(path: Path, data: dict) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
 
 def write_batch_summary_report(summary: BatchSummary, reports_dir: Path) -> Path:
@@ -31,6 +36,5 @@ def write_batch_summary_report(summary: BatchSummary, reports_dir: Path) -> Path
             for r in summary.reports
         ],
     }
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    retry_on_oserror(lambda: _write_json(path, data), description="Batch-Abschlussbericht")
     return path

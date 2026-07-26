@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageCms
 
-from src.utils.fs_utils import ensure_dir
+from src.utils.fs_utils import ensure_dir, retry_on_oserror
 
 
 def _srgb_icc_bytes() -> bytes:
@@ -39,7 +39,7 @@ def export_rgba_png(
     if dpi:
         save_kwargs["dpi"] = dpi
     ensure_dir(output_path.parent)
-    img.save(output_path, format="PNG", **save_kwargs)
+    retry_on_oserror(lambda: img.save(output_path, format="PNG", **save_kwargs), description=f"PNG-Export {output_path.name}")
 
 
 def export_alpha_mask_png(rgba: np.ndarray, output_path: Path) -> None:
@@ -47,4 +47,4 @@ def export_alpha_mask_png(rgba: np.ndarray, output_path: Path) -> None:
     alpha = rgba[:, :, 3]
     img = Image.fromarray(alpha, mode="L")
     ensure_dir(output_path.parent)
-    img.save(output_path, format="PNG")
+    retry_on_oserror(lambda: img.save(output_path, format="PNG"), description=f"Alpha-Masken-Export {output_path.name}")

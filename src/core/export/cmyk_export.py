@@ -13,7 +13,7 @@ import numpy as np
 from PIL import Image, ImageCms
 
 from src.core.color.icc_manager import get_srgb_profile
-from src.utils.fs_utils import ensure_dir
+from src.utils.fs_utils import ensure_dir, retry_on_oserror
 from src.utils.image_qt import composite_over_background
 
 
@@ -39,4 +39,7 @@ def export_cmyk_tiff_preview(
         raise CmykExportError(f"CMYK-Konvertierung fehlgeschlagen: {exc}") from exc
 
     ensure_dir(output_path.parent)
-    cmyk_img.save(output_path, format="TIFF", icc_profile=target_profile.tobytes())
+    retry_on_oserror(
+        lambda: cmyk_img.save(output_path, format="TIFF", icc_profile=target_profile.tobytes()),
+        description=f"CMYK-TIFF-Export {output_path.name}",
+    )
