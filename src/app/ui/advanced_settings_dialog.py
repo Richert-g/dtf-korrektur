@@ -232,7 +232,11 @@ class AdvancedSettingsDialog(QDialog):
 
     def apply_to_settings(self) -> None:
         a = self.settings.alpha
-        self.settings.alpha_mode = self.alpha_mode_combo.currentData()
+        # AlphaMode/RenderingIntent erben von str: QComboBox.currentData() liefert
+        # dafuer in PySide6 mitunter ein reines str-Objekt statt des Enum-Members
+        # zurueck (die Enum-Identitaet geht bei der QVariant-Rueckkonvertierung
+        # verloren). Explizit re-wrappen, damit spaeteres .value nicht crasht.
+        self.settings.alpha_mode = AlphaMode(self.alpha_mode_combo.currentData())
         a.weak_alpha_threshold = self.weak_threshold.value()
         a.near_opaque_threshold = self.near_opaque_threshold.value()
         a.min_island_size_px = self.min_island.value()
@@ -248,7 +252,7 @@ class AdvancedSettingsDialog(QDialog):
         c = self.settings.color
         c.target_profile_path = self.target_profile_edit.text().strip() or None
         c.auto_select_intent = self.auto_intent.isChecked()
-        c.rendering_intent = self.intent_combo.currentData()
+        c.rendering_intent = RenderingIntent(self.intent_combo.currentData())
         c.black_point_compensation = self.bpc.isChecked()
         c.show_gamut_warning = self.gamut_warning.isChecked()
         self.settings.gamut.max_auto_saturation_reduction = self.max_saturation.value()
