@@ -19,6 +19,18 @@ class MainController:
         self.current_preset: PresetName = PresetName.DTF_AUTO
         self.selected_files: list[Path] = []
         self.output_dir: Path | None = None
+
+        # Welches Preset zuletzt aktiv war, wird nicht persistiert (current_preset
+        # startet immer bei DTF_AUTO). Ohne diesen Reset könnte ein aus einer
+        # früheren Sitzung gespeicherter DTF-King-PDF-Zustand (output_format
+        # weiterhin "pdf_cmyk") unbemerkt bestehen bleiben, obwohl die
+        # Oberfläche wieder ein normales Preset zeigt - "Automatisch
+        # optimieren" würde dann fälschlich versuchen, eine PDF statt einer
+        # PNG zu erzeugen, und die Vorher/Nachher-Vorschau bliebe leer.
+        from src.core.presets.presets import reset_dtf_king_only_fields
+
+        reset_dtf_king_only_fields(self.settings)
+
         self.startup_warnings: list[str] = self._validate_loaded_icc_path()
 
     def _validate_loaded_icc_path(self) -> list[str]:

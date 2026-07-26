@@ -148,7 +148,7 @@ PRESET_DESCRIPTIONS: dict[PresetName, str] = {
 _DEFAULT_SETTINGS_FOR_RESET = ProcessingSettings()
 
 
-def _reset_dtf_king_only_fields(settings: ProcessingSettings) -> None:
+def reset_dtf_king_only_fields(settings: ProcessingSettings) -> None:
     d = _DEFAULT_SETTINGS_FOR_RESET
     settings.export.output_format = d.export.output_format
     settings.export.pdf_width_mm = d.export.pdf_width_mm
@@ -163,5 +163,5 @@ def apply_preset(settings: ProcessingSettings, preset: PresetName) -> None:
     handler = PRESET_HANDLERS.get(preset)
     if handler is None:
         raise ValueError(f"Unbekanntes Preset: {preset}")
-    _reset_dtf_king_only_fields(settings)
+    reset_dtf_king_only_fields(settings)
     handler(settings)
