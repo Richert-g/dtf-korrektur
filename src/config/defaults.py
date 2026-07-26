@@ -84,6 +84,11 @@ class GamutThresholds:
     max_optimization_iterations: int = 4
     # Abbruch, wenn die Verbesserung zwischen zwei Iterationen kleiner ist
     min_improvement_delta_e: float = 0.15
+    # Schaltet die gesamte zusätzliche, eigene Gamut-/Sättigungskorrektur nach
+    # der ICC-Konvertierung aus (z. B. für das DTF-King-Preset). Ist False,
+    # bleibt es bei genau einer einzigen echten ICC-Transformation ohne
+    # jede weitere pauschale Farbanpassung.
+    enable_auto_gamut_correction: bool = True
     # Hauttonbereich (Lab a*/b* grobe Schätzung) und Grauwerte werden geschont
     protect_skin_tones: bool = True
     protect_neutral_grays: bool = True
@@ -114,6 +119,9 @@ class ExportSettings:
     white_mask_choke_px: float = 0.0  # 0 = automatisch empfohlenen Wert verwenden
     write_diff_overlays: bool = True  # Vorschau: entfernte/verstärkte Pixel farbig hervorgehoben
     write_gamut_warning: bool = True  # Vorschau: außerhalb des Zielfarbraums liegende Pixel farbig hervorgehoben
+    # Vorschau: Zustand direkt nach Alpha-/Halo-Korrektur, VOR jeder Farbkonvertierung
+    # (siehe "Transparenzoptimiert - Farben unverändert" in der Ansicht-Auswahl)
+    write_transparency_only_preview: bool = True
     write_json_report: bool = True
     write_html_report: bool = True
     keep_metadata: bool = False
@@ -126,7 +134,19 @@ class ExportSettings:
     filename_suffix_gamut_warning: str = "_gamut_warning"
     filename_suffix_report_json: str = "_report.json"
     filename_suffix_report_html: str = "_report.html"
+    filename_suffix_pdf: str = "_dtf_king_iso_coated_v2"
     overwrite_existing: bool = False
+
+    # --- Druckfertiger CMYK-PDF-Export (DTF-King) ---
+    # Gewünschte Ausgabebreite/-höhe in mm. Ist nur eine der beiden Angaben
+    # gesetzt, wird die andere proportional zu den Bildpixeln berechnet. Sind
+    # beide None, wird die native Größe bei pdf_target_dpi verwendet.
+    pdf_width_mm: float | None = None
+    pdf_height_mm: float | None = None
+    pdf_target_dpi: float = 300.0
+    # Ohne explizite Aktivierung wird nie künstlich hochskaliert, wenn die
+    # effektive dpi unter pdf_target_dpi liegt - nur eine Warnung angezeigt.
+    pdf_allow_upscale: bool = False
 
 
 @dataclass

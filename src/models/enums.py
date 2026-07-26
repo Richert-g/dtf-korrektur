@@ -42,6 +42,7 @@ class OutputFormat(str, Enum):
     SOFTPROOF_PNG = "softproof_png"
     ALPHA_MASK_PNG = "alpha_mask_png"
     WHITE_MASK_PNG = "white_mask_png"
+    PDF_CMYK = "pdf_cmyk"
 
 
 class PresetName(str, Enum):
@@ -52,4 +53,5 @@ class PresetName(str, Enum):
     DTF_SOFT_SHADOW = "DTF mit weichem Schatten"
     TRANSPARENCY_ONLY = "Nur Transparenz bereinigen"
     COLOR_ONLY = "Nur Farben optimieren"
+    DTF_KING_ISO_COATED_V2 = "DTF-King – ISO Coated v2 (ECI)"
     CUSTOM = "Benutzerdefiniert"

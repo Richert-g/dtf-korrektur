@@ -19,6 +19,31 @@ class MainController:
         self.current_preset: PresetName = PresetName.DTF_AUTO
         self.selected_files: list[Path] = []
         self.output_dir: Path | None = None
+        self.startup_warnings: list[str] = self._validate_loaded_icc_path()
+
+    def _validate_loaded_icc_path(self) -> list[str]:
+        """Prüft beim Programmstart, ob ein gespeichertes ICC-Zielprofil noch
+        existiert und gültig ist (RGB- oder CMYK-Profil - dieses Feld wird
+        von allen Presets gemeinsam genutzt, nicht nur DTF-King). Ungültige/
+        fehlende Pfade werden erkannt und zurückgesetzt, statt unbemerkt eine
+        defekte Einstellung zu behalten.
+        """
+        path_str = self.settings.color.target_profile_path
+        if not path_str:
+            return []
+        path = Path(path_str)
+        if not path.exists():
+            logger.warning("Gespeichertes ICC-Zielprofil nicht mehr vorhanden: %s", path)
+            self.settings.color.target_profile_path = None
+            return [f"Das zuletzt verwendete ICC-Zielprofil wurde nicht gefunden: {path}"]
+
+        from src.core.color.icc_manager import load_icc_profile
+
+        if load_icc_profile(path) is None:
+            logger.warning("Gespeichertes ICC-Zielprofil ist defekt/ungültig geworden: %s", path)
+            self.settings.color.target_profile_path = None
+            return [f"Das zuletzt verwendete ICC-Zielprofil ist beschädigt oder ungültig: {path.name}"]
+        return []
 
     def set_files(self, files: list[Path]) -> None:
         self.selected_files = files

@@ -33,14 +33,16 @@ from src.app.controllers.main_controller import MainController
 from src.app.ui.advanced_settings_dialog import AdvancedSettingsDialog
 from src.app.ui.compare_slider import CompareSliderWidget
 from src.app.ui.drop_area import DropArea
+from src.app.ui.dtf_king_export_dialog import DtfKingExportDialog
 from src.app.ui.zoom_pan_view import ZoomToolbar
 from src.app.ui.zoomable_view import ZoomableImageView
 from src.app.workers.analysis_worker import run_analysis_in_thread
 from src.app.workers.pipeline_worker import run_batch_in_thread
 from src.config.defaults import MAX_PREVIEW_DIMENSION_PX
 from src.core.analysis.image_loader import load_image
+from src.core.export.dtf_king_export import process_image_for_dtf_king_pdf_safe
 from src.core.pipeline import process_image_safe
-from src.models.enums import PresetName
+from src.models.enums import OutputFormat, PresetName
 from src.utils.image_qt import (
     checkerboard_background,
     composite_over_background,
@@ -61,6 +63,13 @@ VIEW_STRENGTHENED_PIXELS = "Verstärkte Pixel"
 VIEW_GAMUT_WARNING = "Gamut-Warnung"
 VIEW_WHITE_MASK = "Weißunterlegungsmaske"
 
+# Drei klar getrennte Vorschauzustände (Original / nur Transparenz / Softproof
+# eines Druckdienstleister-Presets), damit Transparenzkorrektur und
+# Farbkonvertierung nicht miteinander vermischt betrachtet werden.
+VIEW_ORIGINAL_SOURCE = "Original – Quellfarbraum"
+VIEW_TRANSPARENCY_ONLY = "Transparenzoptimiert – Farben unverändert"
+VIEW_DTF_KING_SOFTPROOF = "DTF-King Softproof – ISO Coated v2"
+
 # Vollständige Liste aller möglichen Bezeichnungen - dient als Grundlage für
 # die dynamische Mindestbreite des "Ansicht"-Auswahlfelds (siehe
 # _compute_view_combo_min_width), unabhängig davon, welche Einträge im
@@ -76,6 +85,9 @@ ALL_VIEW_MODE_LABELS = [
     VIEW_STRENGTHENED_PIXELS,
     VIEW_GAMUT_WARNING,
     VIEW_WHITE_MASK,
+    VIEW_ORIGINAL_SOURCE,
+    VIEW_TRANSPARENCY_ONLY,
+    VIEW_DTF_KING_SOFTPROOF,
 ]
 
 # Fallback-Mindestbreite (Prompt-Vorgabe: ca. 190-220px), falls die
@@ -125,10 +137,14 @@ class MainWindow(QMainWindow):
         self._current_strengthened_pixels_rgba: np.ndarray | None = None
         self._current_gamut_warning_rgba: np.ndarray | None = None
         self._current_white_mask_rgba: np.ndarray | None = None
+        self._current_transparency_only_rgba: np.ndarray | None = None
         self._last_reports: dict[str, object] = {}
 
         self._build_ui()
         self._connect_signals()
+
+        if self.controller.startup_warnings:
+            QMessageBox.warning(self, "Hinweis zu gespeicherten Einstellungen", "\n".join(self.controller.startup_warnings))
 
     # ------------------------------------------------------------------ UI
     def _build_ui(self) -> None:
@@ -423,6 +439,7 @@ class MainWindow(QMainWindow):
         self._current_strengthened_pixels_rgba = None
         self._current_gamut_warning_rgba = None
         self._current_white_mask_rgba = None
+        self._current_transparency_only_rgba = None
         self._set_view_modes([VIEW_ORIGINAL])
         self.summary_text.setPlainText(_format_analysis_summary(result))
 
@@ -449,6 +466,12 @@ class MainWindow(QMainWindow):
             rgba = self._current_gamut_warning_rgba
         elif mode == VIEW_WHITE_MASK:
             rgba = self._current_white_mask_rgba
+        elif mode == VIEW_ORIGINAL_SOURCE:
+            rgba = self._current_original_rgba
+        elif mode == VIEW_TRANSPARENCY_ONLY:
+            rgba = self._current_transparency_only_rgba
+        elif mode == VIEW_DTF_KING_SOFTPROOF:
+            rgba = self._current_softproof_rgba
 
         if rgba is None:
             return
@@ -473,6 +496,13 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Kein Ausgabeordner", "Bitte zuerst einen Ausgabeordner wählen.")
             return
 
+        process_fn = process_image_safe
+        if self.controller.settings.export.output_format == OutputFormat.PDF_CMYK:
+            dialog = DtfKingExportDialog(self.controller.settings, self.controller.selected_files[0], self)
+            if not dialog.exec():
+                return  # Benutzer hat abgebrochen - keine Datei wurde geschrieben
+            process_fn = process_image_for_dtf_king_pdf_safe
+
         self.controller.persist_settings()
         self.btn_optimize.setEnabled(False)
         self.btn_cancel.setEnabled(True)
@@ -481,7 +511,7 @@ class MainWindow(QMainWindow):
         self.summary_text.setPlainText("Verarbeitung läuft …")
 
         self._batch_thread, self._batch_worker = run_batch_in_thread(
-            self.controller.selected_files, self.controller.settings, self.controller.output_dir, process_image_safe
+            self.controller.selected_files, self.controller.settings, self.controller.output_dir, process_fn
         )
         self._batch_worker.progress.connect(self._on_batch_progress)
         self._batch_worker.file_finished.connect(self._on_batch_file_finished)
@@ -505,6 +535,14 @@ class MainWindow(QMainWindow):
 
     def _on_batch_file_finished(self, report) -> None:
         self._last_reports[str(report.source_path)] = report
+        if report.output_format == "pdf_cmyk":
+            if report.success:
+                self.summary_text.append(
+                    f"\n{report.source_path.name}: PDF erfolgreich erzeugt und validiert -> {report.output_path.name}"
+                )
+            else:
+                self.summary_text.append(f"\n{report.source_path.name}: Export fehlgeschlagen - {'; '.join(report.errors)}")
+            return
         current_row = self.file_list.currentRow()
         if 0 <= current_row < len(self.controller.selected_files):
             if self.controller.selected_files[current_row] == report.source_path and report.success:
@@ -531,6 +569,9 @@ class MainWindow(QMainWindow):
         gamut_warning_path = previews_dir / f"{stem}_gamut_warning.png"
         self._current_gamut_warning_rgba = self._try_load(gamut_warning_path)
 
+        transparency_only_path = previews_dir / f"{stem}_transparency_only.png"
+        self._current_transparency_only_rgba = self._try_load(transparency_only_path)
+
         masks_dir = report.output_path.parent.parent / "masks"
         white_mask_path = masks_dir / f"{stem}_white_mask.png"
         self._current_white_mask_rgba = self._try_load(white_mask_path)
@@ -546,6 +587,13 @@ class MainWindow(QMainWindow):
             modes.append(VIEW_GAMUT_WARNING)
         if self._current_white_mask_rgba is not None:
             modes.append(VIEW_WHITE_MASK)
+        # Drei klar getrennte, eindeutig benannte Zustände zusätzlich zu den
+        # obigen (bestehenden) Ansichten anbieten (Prompt Abschnitt 7).
+        modes.append(VIEW_ORIGINAL_SOURCE)
+        if self._current_transparency_only_rgba is not None:
+            modes.append(VIEW_TRANSPARENCY_ONLY)
+        if self._current_softproof_rgba is not None:
+            modes.append(VIEW_DTF_KING_SOFTPROOF)
         self._set_view_modes(modes)
         self.view_mode_combo.setCurrentText(VIEW_RESULT)
 

@@ -163,33 +163,40 @@ def optimize_colors(
             working_rgb = rt_relcol
             working_delta = delta
 
-    optimized_rgb = rgb.copy()
     total_adjusted = 0
     total_yellow_orange = 0
-    prev_mean_delta = float(working_delta[visible_mask].mean())
 
-    for _ in range(gamut_cfg.max_optimization_iterations):
-        out_of_gamut_mask = (working_delta > gamut_cfg.delta_e_out_of_gamut) & visible_mask
-        if not out_of_gamut_mask.any():
-            break
-        result = reduce_saturation_pass(optimized_rgb, working_delta, out_of_gamut_mask, gamut_cfg)
-        optimized_rgb = result.rgb
-        total_adjusted += result.adjusted_pixel_count
-        total_yellow_orange += result.yellow_orange_adjusted_count
+    if not gamut_cfg.enable_auto_gamut_correction:
+        # Genau eine echte ICC-Konvertierung, keine weitere Sättigungs- oder
+        # Gamut-Korrektur (z. B. DTF-King-Preset). optimized_rgb spiegelt
+        # exakt das Ergebnis des einen Round-Trips oben wider.
+        optimized_rgb = working_rgb
+    else:
+        optimized_rgb = rgb.copy()
+        prev_mean_delta = float(working_delta[visible_mask].mean())
 
-        try:
-            working_rgb = _round_trip(
-                optimized_rgb, source_profile, target_profile, target_mode, _cms_intent(intent), color_cfg.black_point_compensation
-            )
-            working_delta = delta_e_cie76(rgb_array_to_lab(optimized_rgb), rgb_array_to_lab(working_rgb))
-        except Exception:
-            break
+        for _ in range(gamut_cfg.max_optimization_iterations):
+            out_of_gamut_mask = (working_delta > gamut_cfg.delta_e_out_of_gamut) & visible_mask
+            if not out_of_gamut_mask.any():
+                break
+            result = reduce_saturation_pass(optimized_rgb, working_delta, out_of_gamut_mask, gamut_cfg)
+            optimized_rgb = result.rgb
+            total_adjusted += result.adjusted_pixel_count
+            total_yellow_orange += result.yellow_orange_adjusted_count
 
-        new_mean_delta = float(working_delta[visible_mask].mean())
-        improvement = prev_mean_delta - new_mean_delta
-        prev_mean_delta = new_mean_delta
-        if improvement < gamut_cfg.min_improvement_delta_e:
-            break
+            try:
+                working_rgb = _round_trip(
+                    optimized_rgb, source_profile, target_profile, target_mode, _cms_intent(intent), color_cfg.black_point_compensation
+                )
+                working_delta = delta_e_cie76(rgb_array_to_lab(optimized_rgb), rgb_array_to_lab(working_rgb))
+            except Exception:
+                break
+
+            new_mean_delta = float(working_delta[visible_mask].mean())
+            improvement = prev_mean_delta - new_mean_delta
+            prev_mean_delta = new_mean_delta
+            if improvement < gamut_cfg.min_improvement_delta_e:
+                break
 
     visible_final_delta = working_delta[visible_mask]
     out_of_gamut_after_pct = float((visible_final_delta > gamut_cfg.delta_e_out_of_gamut).sum() / visible_final_delta.size * 100)
@@ -199,21 +206,36 @@ def optimize_colors(
     report.mean_delta_e = float(visible_final_delta.mean())
     report.max_delta_e = float(visible_final_delta.max())
 
-    report.add_step(
-        "color_optimization",
-        f"Farben für das Druckprofil '{target_name}' angepasst ({reason})",
-    )
+    if gamut_cfg.enable_auto_gamut_correction:
+        report.add_step(
+            "color_optimization",
+            f"Farben für das Druckprofil '{target_name}' angepasst ({reason})",
+        )
+    else:
+        report.add_step(
+            "color_optimization",
+            f"Einmalige ICC-Konvertierung nach '{target_name}' durchgeführt "
+            f"(Rendering Intent: {intent.value}, Schwarzpunktkompensation: "
+            f"{'aktiviert' if color_cfg.black_point_compensation else 'deaktiviert'}). "
+            "Keine zusätzliche Sättigungs- oder Gamut-Korrektur angewendet.",
+        )
     if total_adjusted > 0:
         report.add_step(
             "saturation_reduction",
             f"Sättigung von {total_adjusted} Pixeln außerhalb des Farbraums gezielt reduziert.",
             pixels_affected=total_adjusted,
         )
-    if color_cfg.show_gamut_warning:
-        if out_of_gamut_before_pct > 0:
+    if color_cfg.show_gamut_warning and out_of_gamut_before_pct > 0:
+        if gamut_cfg.enable_auto_gamut_correction:
             report.warnings.append(
                 f"{out_of_gamut_before_pct:.1f}% der Farben lagen außerhalb des druckbaren Farbraums und wurden angepasst "
                 f"(davor Ø ΔE {float(visible_delta.mean()):.2f}, danach Ø ΔE {report.mean_delta_e:.2f})."
+            )
+        else:
+            report.warnings.append(
+                f"{out_of_gamut_before_pct:.1f}% der Quellfarben lagen außerhalb des Farbraums von "
+                f"'{target_name}'. Die Farben wurden ausschließlich durch die ICC-Konvertierung in den "
+                "Zielfarbraum überführt. Es wurde keine zusätzliche Sättigungsreduktion angewendet."
             )
     if total_yellow_orange > 0:
         report.warnings.append(

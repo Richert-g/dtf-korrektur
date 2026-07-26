@@ -17,6 +17,7 @@ class OutputPaths:
     removed_pixels_png: Path
     strengthened_pixels_png: Path
     gamut_warning_png: Path
+    transparency_only_png: Path
     report_json: Path
     report_html: Path
     cmyk_tiff: Path
@@ -45,6 +46,7 @@ def build_output_paths(source_path: Path, output_root: Path, export: ExportSetti
         removed_pixels_png=dirs["previews"] / f"{stem}{export.filename_suffix_removed_pixels}.png",
         strengthened_pixels_png=dirs["previews"] / f"{stem}{export.filename_suffix_strengthened_pixels}.png",
         gamut_warning_png=dirs["previews"] / f"{stem}{export.filename_suffix_gamut_warning}.png",
+        transparency_only_png=dirs["previews"] / f"{stem}_transparency_only.png",
         report_json=dirs["reports"] / f"{stem}{export.filename_suffix_report_json}",
         report_html=dirs["reports"] / f"{stem}{export.filename_suffix_report_html}",
         cmyk_tiff=dirs["optimized"] / f"{stem}_dtf_cmyk_preview.tiff",

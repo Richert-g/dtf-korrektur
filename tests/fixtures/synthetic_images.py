@@ -159,6 +159,37 @@ def make_illustration_soft_edge(w: int = 96, h: int = 96) -> Image.Image:
     return Image.fromarray(arr, mode="RGBA")
 
 
+def make_saturated_blue_cyan_motif(w: int = 80, h: int = 80) -> Image.Image:
+    """Deckendes Motiv mit stark gesättigten Blau-/Cyanflächen und weichem,
+    halbtransparentem Rand - für den Regressionstest "blaues Motiv"
+    (Transparenzkorrektur darf die deckenden Innenflächen farblich nicht
+    anfassen, nur die anschließende ICC-Konvertierung darf das)."""
+    arr = _blank_rgba(w, h)
+    yy, xx = np.mgrid[0:h, 0:w]
+    cx, cy = w / 2, h / 2
+    dist = np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2)
+    r = w * 0.38
+    feather = 6.0
+
+    alpha = np.clip((r + feather - dist) / feather, 0, 1) * 255
+    arr[:, :, 3] = alpha.astype(np.uint8)
+
+    # kräftiges, gesättigtes Blau in der linken Hälfte, Cyan in der rechten
+    arr[:, : w // 2, 0] = 10
+    arr[:, : w // 2, 1] = 40
+    arr[:, : w // 2, 2] = 230
+    arr[:, w // 2 :, 0] = 0
+    arr[:, w // 2 :, 1] = 220
+    arr[:, w // 2 :, 2] = 230
+
+    # vollständig deckender Kernbereich (Innenfläche), deutlich kleiner als
+    # der weiche Rand, damit "deckende Innenfläche" eindeutig testbar ist
+    inner_r = w * 0.22
+    inner_mask = dist < inner_r
+    arr[inner_mask, 3] = 255
+    return Image.fromarray(arr, mode="RGBA")
+
+
 def make_saturated_out_of_gamut(w: int = 64, h: int = 64) -> Image.Image:
     """Sehr stark gesättigte Neonfarben, die typischerweise außerhalb von CMYK liegen."""
     arr = np.zeros((h, w, 3), dtype=np.uint8)

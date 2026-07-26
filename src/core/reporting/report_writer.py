@@ -71,6 +71,8 @@ th {{ background: #eee; }}
 {warnings_html}
 {errors_html}
 
+{pdf_section_html}
+
 <p style="margin-top:2rem;font-size:0.85rem;color:#666;">
 Diese Bildschirmvorschau ist keine Garantie für das endgültige Druckergebnis.
 Das Ergebnis hängt zusätzlich von Drucker, Tinte, Folie/Pulver, RIP, Textil und Pressparametern ab.
@@ -91,6 +93,37 @@ def _warnings_to_html(items: list[str], css_class: str, empty_text: str) -> str:
         return f'<p class="ok">{empty_text}</p>'
     lis = "\n".join(f'<li class="{css_class}">{w}</li>' for w in items)
     return f"<ul>{lis}</ul>"
+
+
+def _pdf_section_to_html(report: ImageProcessingReport) -> str:
+    if report.output_format != "pdf_cmyk":
+        return ""
+    page_mm = report.pdf_page_size_mm
+    dpi = report.pdf_effective_dpi
+    validated_class = "ok" if report.pdf_validated else "err"
+    validated_text = "Ja" if report.pdf_validated else "Nein"
+    dpi_class = "" if report.pdf_meets_target_dpi else "warn"
+    validation_errors_html = (
+        _warnings_to_html(report.pdf_validation_errors, "err", "") if report.pdf_validation_errors else ""
+    )
+    return f"""
+<h2>PDF-Export (Druckdienstleister-Preset)</h2>
+<table>
+<tr><th>Ausgabeformat</th><td>{report.output_format}</td></tr>
+<tr><th>Seiten</th><td>{report.pdf_page_count}</td></tr>
+<tr><th>Seitengröße</th><td>{f"{page_mm[0]:.1f} x {page_mm[1]:.1f} mm" if page_mm else "-"}</td></tr>
+<tr><th>Effektive dpi</th><td class="{dpi_class}">{f"{dpi[0]:.0f} x {dpi[1]:.0f}" if dpi else "-"}</td></tr>
+<tr><th>Zielauflösung erreicht (≥300 dpi)</th><td>{"Ja" if report.pdf_meets_target_dpi else "Nein"}</td></tr>
+<tr><th>ICC-Profil als OutputIntent eingebettet</th><td>{"Ja" if report.pdf_icc_output_intent_embedded else "Nein"}</td></tr>
+<tr><th>Transparenz-Softmask vorhanden</th><td>{"Ja" if report.pdf_has_transparency_smask else "Nein"}</td></tr>
+<tr><th>Zusätzliche Sättigungsreduktion</th><td>{"Ja" if report.additional_saturation_reduction_applied else "Nein"}</td></tr>
+<tr><th>Zusätzliche Gamut-Korrektur</th><td>{"Ja" if report.additional_gamut_correction_applied else "Nein"}</td></tr>
+<tr><th>Spiegelung</th><td>{"Ja" if report.mirrored else "Nein"}</td></tr>
+<tr><th>Schwarzpunktkompensation</th><td>{"aktiviert" if report.black_point_compensation else "deaktiviert"}</td></tr>
+<tr><th>PDF-Validierung erfolgreich</th><td class="{validated_class}">{validated_text}</td></tr>
+</table>
+{validation_errors_html}
+"""
 
 
 def write_html_report(report: ImageProcessingReport, output_path: Path) -> None:
@@ -122,6 +155,7 @@ def write_html_report(report: ImageProcessingReport, output_path: Path) -> None:
         max_de=report.max_delta_e,
         warnings_html=_warnings_to_html(report.warnings, "warn", "Keine Warnungen."),
         errors_html=_warnings_to_html(report.errors, "err", ""),
+        pdf_section_html=_pdf_section_to_html(report),
     )
     ensure_dir(output_path.parent)
     retry_on_oserror(lambda: output_path.write_text(html, encoding="utf-8"), description=f"HTML-Bericht {output_path.name}")

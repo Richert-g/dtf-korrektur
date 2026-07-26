@@ -47,6 +47,7 @@ class ImageProcessingReport:
     max_delta_e: float = 0.0
 
     rendering_intent: RenderingIntent = RenderingIntent.RELATIVE_COLORIMETRIC
+    black_point_compensation: bool = True
     applied_steps: list[ProcessingStepLog] = field(default_factory=list)
 
     warnings: list[str] = field(default_factory=list)
@@ -55,6 +56,20 @@ class ImageProcessingReport:
     processing_duration_seconds: float = 0.0
 
     success: bool = True
+
+    # --- Druckfertiger CMYK-PDF-Export (DTF-King), nur bei output_format="pdf_cmyk" gefüllt ---
+    output_format: str = "png_rgb"
+    additional_saturation_reduction_applied: bool = False
+    additional_gamut_correction_applied: bool = False
+    mirrored: bool = False
+    pdf_page_count: int = 0
+    pdf_page_size_mm: tuple[float, float] | None = None
+    pdf_effective_dpi: tuple[float, float] | None = None
+    pdf_meets_target_dpi: bool = True
+    pdf_icc_output_intent_embedded: bool = False
+    pdf_has_transparency_smask: bool = False
+    pdf_validated: bool = False
+    pdf_validation_errors: list[str] = field(default_factory=list)
 
     def add_step(self, name: str, description: str, pixels_affected: int = 0, **details) -> None:
         self.applied_steps.append(

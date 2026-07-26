@@ -70,7 +70,43 @@ für Drucker/Folie/Pulver (siehe Hinweise unten).
 | DTF mit weichem Schatten | Für Motive mit Schatten/Rauch/Glow |
 | Nur Transparenz bereinigen | Keine Farbanpassung |
 | Nur Farben optimieren | Transparenz bleibt unverändert |
+| DTF-King – ISO Coated v2 (ECI) | Druckfertige CMYK-PDF für den Druckdienstleister DTF-King |
 | Benutzerdefiniert | Vollständig manuelle Steuerung |
+
+## Preset "DTF-King – ISO Coated v2 (ECI)"
+
+Erzeugt statt eines RGB-PNGs eine **einseitige, druckfertige CMYK-PDF** mit
+eingebettetem ICC-Zielprofil, echter Transparenz (Softmask) und mindestens
+300 dpi bei der gewählten Druckgröße - ohne jede zusätzliche, hausgemachte
+Sättigungs- oder Gamut-Korrektur nach der ICC-Konvertierung. Die Farbe
+entsteht ausschließlich durch die eine, echte ICC-Transformation.
+
+**So verwendest du es:**
+
+1. Das offizielle ICC-Profil **"ISO Coated v2 (ECI)"** einmalig über
+   "Importieren…" hinzufügen (z. B. von eci.org). Die App ersetzt es
+   **niemals** automatisch durch ein ähnliches, bereits mitgeliefertes
+   Profil (z. B. FOGRA39) - ohne dieses konkrete Profil bricht der Export
+   mit einer klaren Fehlermeldung ab.
+2. Preset "DTF-King – ISO Coated v2 (ECI)" auswählen. Wurde das Profil in
+   Schritt 1 bereits importiert, wird es automatisch als Zielprofil
+   übernommen (erkennbar an "ISO Coated v2" in der Profilbeschreibung).
+3. Bild(er) auswählen, Ausgabeordner wählen, auf "Automatisch optimieren"
+   klicken.
+4. Es öffnet sich ein Dialog: ICC-Profilstatus, Breite/Höhe/Ziel-dpi (Standard
+   300 dpi, Höhe automatisch proportional zur Breite, oder beides manuell
+   festlegen), sowie eine vollständige Zusammenfassung vor dem eigentlichen
+   Export. Der "Exportieren"-Button ist deaktiviert, solange kein gültiges
+   CMYK-Zielprofil vorliegt.
+5. Nach dem Export wird die erzeugte PDF automatisch erneut geöffnet und
+   geprüft (Seitenzahl, Farbraum, eingebettetes Profil, Transparenzmaske,
+   Seitengröße). Nur bei erfolgreicher Prüfung gilt der Export als
+   abgeschlossen.
+
+Die Bildpixel werden **nie ohne Hinweis künstlich hochskaliert** - reichen sie
+für die gewünschte Größe bei 300 dpi nicht aus, erscheint eine Warnung wie
+"Die Datei erreicht bei 28,0 cm Breite nur 238 dpi …". Hochskalierung muss im
+Dialog ausdrücklich aktiviert werden.
 
 ## Erweiterte Einstellungen
 

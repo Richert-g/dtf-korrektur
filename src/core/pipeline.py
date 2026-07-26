@@ -67,6 +67,7 @@ def process_image(path: Path, settings: ProcessingSettings, output_root: Path) -
     alpha_result = clean_alpha(array, classification.image_type, settings, report)
     array = alpha_result.rgba
     alpha_after_cleanup = array[:, :, 3]
+    transparency_only_rgba = array.copy()
 
     # --- Farboptimierung / ICC (Phase 3) ---
     from src.core.color.color_pipeline import optimize_colors
@@ -77,6 +78,15 @@ def process_image(path: Path, settings: ProcessingSettings, output_root: Path) -
     export = settings.export
     paths = build_output_paths(path, output_root, export)
     optimized_path = avoid_collision(paths.optimized_png, export.overwrite_existing)
+
+    if export.write_transparency_only_preview:
+        transparency_only_path = avoid_collision(paths.transparency_only_png, export.overwrite_existing)
+        export_rgba_png(transparency_only_rgba, transparency_only_path, icc_profile_bytes=get_srgb_icc_bytes())
+        report.add_step(
+            "export_transparency_only",
+            "Vorschau 'Transparenzoptimiert - Farben unverändert' erzeugt (Zustand nach Alpha-/"
+            "Halo-Korrektur, vor jeder Farbkonvertierung).",
+        )
 
     icc_bytes = color_info.target_icc_bytes if color_info else None
     export_rgba_png(array, optimized_path, icc_profile_bytes=icc_bytes)
