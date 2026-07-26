@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec
+.pytest_cache/
+resources/sample_images/_test_output/
+
+# Rohquelle der ICC-Profile - die tatsächlich verwendeten Kopien liegen
+# bereits unter resources/profiles/ und werden mitversioniert.
+/ICC-Profiles/
+
+neu_pruefen.txt

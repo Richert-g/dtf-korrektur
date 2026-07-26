@@ -1,0 +1,537 @@
+"""Hauptfenster (Prompt Abschnitt 4 & 25): bewusst einfach gehalten."""
+from __future__ import annotations
+
+import logging
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import numpy as np
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QComboBox,
+    QFileDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QMainWindow,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QSplitter,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
+from src.app.controllers.main_controller import MainController
+from src.app.ui.advanced_settings_dialog import AdvancedSettingsDialog
+from src.app.ui.compare_slider import CompareSliderWidget
+from src.app.ui.drop_area import DropArea
+from src.app.ui.zoomable_view import ZoomableImageView
+from src.app.workers.analysis_worker import run_analysis_in_thread
+from src.app.workers.pipeline_worker import run_batch_in_thread
+from src.core.analysis.image_loader import load_image
+from src.core.pipeline import process_image_safe
+from src.models.enums import PresetName
+from src.config.defaults import MAX_PREVIEW_DIMENSION_PX
+from src.utils.image_qt import (
+    checkerboard_background,
+    composite_over_background,
+    downscale_for_preview,
+    rgba_array_to_qpixmap,
+)
+
+logger = logging.getLogger(__name__)
+
+VIEW_ORIGINAL = "Original"
+VIEW_RESULT = "Ergebnis"
+VIEW_SOFTPROOF = "Softproof"
+VIEW_ALPHA_MASK = "Alpha-Maske"
+VIEW_WHITE_TEXTILE = "Auf weißem Textil"
+VIEW_BLACK_TEXTILE = "Auf schwarzem Textil"
+VIEW_REMOVED_PIXELS = "Entfernte Pixel"
+VIEW_STRENGTHENED_PIXELS = "Verstärkte Pixel"
+
+
+class MainWindow(QMainWindow):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWindowTitle("DTF Korrektur")
+        self.resize(1280, 800)
+
+        from src.config.paths import get_app_icon_path
+
+        icon_path = get_app_icon_path()
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
+
+        self.controller = MainController()
+        self._analysis_thread = None
+        self._analysis_worker = None
+        self._batch_thread = None
+        self._batch_worker = None
+        self._current_original_rgba: np.ndarray | None = None
+        self._current_result_rgba: np.ndarray | None = None
+        self._current_softproof_rgba: np.ndarray | None = None
+        self._current_removed_pixels_rgba: np.ndarray | None = None
+        self._current_strengthened_pixels_rgba: np.ndarray | None = None
+        self._last_reports: dict[str, object] = {}
+
+        self._build_ui()
+        self._connect_signals()
+
+    # ------------------------------------------------------------------ UI
+    def _build_ui(self) -> None:
+        central = QWidget()
+        self.setCentralWidget(central)
+        root_layout = QHBoxLayout(central)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        root_layout.addWidget(splitter)
+
+        splitter.addWidget(self._build_left_panel())
+        splitter.addWidget(self._build_center_panel())
+        splitter.addWidget(self._build_right_panel())
+        splitter.setSizes([260, 700, 320])
+
+    def _build_left_panel(self) -> QWidget:
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+
+        self.drop_area = DropArea()
+        layout.addWidget(self.drop_area)
+
+        btn_row = QHBoxLayout()
+        self.btn_select_file = QPushButton("Bild auswählen")
+        self.btn_select_folder = QPushButton("Ordner auswählen")
+        btn_row.addWidget(self.btn_select_file)
+        btn_row.addWidget(self.btn_select_folder)
+        layout.addLayout(btn_row)
+
+        layout.addWidget(QLabel("Ausgewählte Dateien:"))
+        self.file_list = QListWidget()
+        self.file_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        layout.addWidget(self.file_list, stretch=1)
+
+        return panel
+
+    def _build_center_panel(self) -> QWidget:
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+
+        view_row = QHBoxLayout()
+        view_row.addWidget(QLabel("Ansicht:"))
+        self.view_mode_combo = QComboBox()
+        self.view_mode_combo.addItems([VIEW_ORIGINAL])
+        view_row.addWidget(self.view_mode_combo)
+        view_row.addStretch(1)
+        layout.addLayout(view_row)
+
+        self.preview_tabs = QTabWidget()
+        self.preview_view = ZoomableImageView()
+        self.compare_view = CompareSliderWidget()
+        self.preview_tabs.addTab(self.preview_view, "Vorschau")
+        self.preview_tabs.addTab(self.compare_view, "Vorher / Nachher")
+        layout.addWidget(self.preview_tabs, stretch=1)
+
+        return panel
+
+    def _build_right_panel(self) -> QWidget:
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+
+        preset_group = QGroupBox("Druckprofil / Preset")
+        preset_layout = QVBoxLayout(preset_group)
+        self.preset_combo = QComboBox()
+        for preset in PresetName:
+            self.preset_combo.addItem(preset.value, preset)
+        preset_layout.addWidget(self.preset_combo)
+
+        profile_row = QHBoxLayout()
+        self.profile_combo = QComboBox()
+        self._reload_profiles()
+        self.btn_import_profile = QPushButton("Importieren…")
+        profile_row.addWidget(self.profile_combo, stretch=1)
+        profile_row.addWidget(self.btn_import_profile)
+        preset_layout.addWidget(QLabel("ICC-Zielprofil:"))
+        preset_layout.addLayout(profile_row)
+        layout.addWidget(preset_group)
+
+        output_group = QGroupBox("Ausgabeordner")
+        output_layout = QHBoxLayout(output_group)
+        self.output_label = QLabel("(wird automatisch neben dem Bild angelegt)")
+        self.output_label.setWordWrap(True)
+        self.btn_select_output = QPushButton("Wählen…")
+        output_layout.addWidget(self.output_label, stretch=1)
+        output_layout.addWidget(self.btn_select_output)
+        layout.addWidget(output_group)
+
+        layout.addWidget(QLabel("Zusammenfassung:"))
+        self.summary_text = QTextEdit()
+        self.summary_text.setReadOnly(True)
+        layout.addWidget(self.summary_text, stretch=1)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setValue(0)
+        layout.addWidget(self.progress_bar)
+
+        optimize_row = QHBoxLayout()
+        self.btn_optimize = QPushButton("Automatisch optimieren")
+        self.btn_optimize.setMinimumHeight(48)
+        self.btn_optimize.setStyleSheet("font-weight: bold; font-size: 14px;")
+        self.btn_cancel = QPushButton("Abbrechen")
+        self.btn_cancel.setEnabled(False)
+        optimize_row.addWidget(self.btn_optimize, stretch=1)
+        optimize_row.addWidget(self.btn_cancel)
+        layout.addLayout(optimize_row)
+
+        bottom_row = QHBoxLayout()
+        self.btn_advanced = QPushButton("Erweiterte Einstellungen")
+        self.btn_open_output = QPushButton("Ergebnisordner öffnen")
+        self.btn_open_output.setEnabled(False)
+        bottom_row.addWidget(self.btn_advanced)
+        bottom_row.addWidget(self.btn_open_output)
+        layout.addLayout(bottom_row)
+
+        return panel
+
+    def _connect_signals(self) -> None:
+        self.drop_area.files_dropped.connect(self._on_files_selected)
+        self.btn_select_file.clicked.connect(self._on_select_file_clicked)
+        self.btn_select_folder.clicked.connect(self._on_select_folder_clicked)
+        self.btn_select_output.clicked.connect(self._on_select_output_clicked)
+        self.file_list.currentRowChanged.connect(self._on_file_row_changed)
+        self.preset_combo.currentIndexChanged.connect(self._on_preset_changed)
+        self.profile_combo.currentIndexChanged.connect(self._on_profile_changed)
+        self.btn_import_profile.clicked.connect(self._on_import_profile_clicked)
+        self.view_mode_combo.currentTextChanged.connect(self._on_view_mode_changed)
+        self.btn_optimize.clicked.connect(self._on_optimize_clicked)
+        self.btn_cancel.clicked.connect(self._on_cancel_clicked)
+        self.btn_advanced.clicked.connect(self._on_advanced_settings_clicked)
+        self.btn_open_output.clicked.connect(self._on_open_output_clicked)
+
+    # ------------------------------------------------------------- Helpers
+    def _reload_profiles(self) -> None:
+        from src.core.color.icc_manager import list_available_profiles
+
+        self.profile_combo.blockSignals(True)
+        self.profile_combo.clear()
+        self.profile_combo.addItem("Kein Zielprofil", None)
+        for info in list_available_profiles():
+            self.profile_combo.addItem(info.name, str(info.path))
+        self.profile_combo.blockSignals(False)
+
+    def _set_view_modes(self, modes: list[str]) -> None:
+        current = self.view_mode_combo.currentText()
+        self.view_mode_combo.blockSignals(True)
+        self.view_mode_combo.clear()
+        self.view_mode_combo.addItems(modes)
+        if current in modes:
+            self.view_mode_combo.setCurrentText(current)
+        self.view_mode_combo.blockSignals(False)
+        self._on_view_mode_changed(self.view_mode_combo.currentText())
+
+    # -------------------------------------------------------------- Slots
+    def _on_files_selected(self, files: list[Path]) -> None:
+        self.controller.set_files(files)
+        self.file_list.clear()
+        for f in files:
+            self.file_list.addItem(str(f))
+        self.output_label.setText(str(self.controller.output_dir) if self.controller.output_dir else "-")
+        if files:
+            self.file_list.setCurrentRow(0)
+
+    def _on_select_file_clicked(self) -> None:
+        from src.config.defaults import SUPPORTED_IMPORT_FORMATS
+
+        patterns = " ".join(f"*{ext}" for ext in sorted(SUPPORTED_IMPORT_FORMATS))
+        files, _ = QFileDialog.getOpenFileNames(self, "Bild(er) auswählen", "", f"Bilder ({patterns})")
+        if files:
+            self._on_files_selected([Path(f) for f in files])
+
+    def _on_select_folder_clicked(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self, "Ordner auswählen")
+        if folder:
+            self._on_files_selected(DropArea._collect_supported_files([Path(folder)]))
+
+    def _on_select_output_clicked(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self, "Ausgabeordner auswählen")
+        if folder:
+            self.controller.set_output_dir(Path(folder))
+            self.output_label.setText(folder)
+
+    def _on_preset_changed(self) -> None:
+        preset = self.preset_combo.currentData()
+        if preset is not None:
+            self.controller.apply_preset(preset)
+
+    def _on_profile_changed(self) -> None:
+        path = self.profile_combo.currentData()
+        self.controller.settings.color.target_profile_path = path
+
+    def _on_import_profile_clicked(self) -> None:
+        from src.core.color.icc_manager import ICCProfileError, import_profile
+
+        file, _ = QFileDialog.getOpenFileName(self, "ICC-Profil importieren", "", "ICC-Profile (*.icc *.icm)")
+        if not file:
+            return
+        try:
+            import_profile(Path(file))
+            self._reload_profiles()
+        except ICCProfileError as exc:
+            QMessageBox.warning(self, "Import fehlgeschlagen", str(exc))
+
+    def _on_file_row_changed(self, row: int) -> None:
+        if row < 0 or row >= len(self.controller.selected_files):
+            return
+        path = self.controller.selected_files[row]
+        self._start_analysis(path)
+
+    def _start_analysis(self, path: Path) -> None:
+        self.summary_text.setPlainText(f"Analysiere {path.name} …")
+        self._analysis_thread, self._analysis_worker = run_analysis_in_thread(path, self.controller.settings)
+        self._analysis_worker.finished.connect(self._on_analysis_finished)
+        self._analysis_thread.start()
+
+    def _on_analysis_finished(self, result, loaded, error) -> None:
+        if error or result is None:
+            self.summary_text.setPlainText(f"Fehler bei der Analyse: {error}")
+            return
+        self._current_original_rgba = loaded.array
+        self._current_result_rgba = None
+        self._current_softproof_rgba = None
+        self._current_removed_pixels_rgba = None
+        self._current_strengthened_pixels_rgba = None
+        self._set_view_modes([VIEW_ORIGINAL])
+        self.summary_text.setPlainText(_format_analysis_summary(result))
+
+    def _on_view_mode_changed(self, mode: str) -> None:
+        rgba = None
+        if mode == VIEW_ORIGINAL:
+            rgba = self._current_original_rgba
+        elif mode == VIEW_RESULT:
+            rgba = self._current_result_rgba
+        elif mode == VIEW_SOFTPROOF:
+            rgba = self._current_softproof_rgba
+        elif mode == VIEW_ALPHA_MASK and self._current_result_rgba is not None:
+            a = self._current_result_rgba[:, :, 3]
+            rgba = np.dstack([a, a, a, np.full_like(a, 255)])
+        elif mode == VIEW_WHITE_TEXTILE and self._current_result_rgba is not None:
+            rgba = composite_over_background(self._current_result_rgba, (255, 255, 255))
+        elif mode == VIEW_BLACK_TEXTILE and self._current_result_rgba is not None:
+            rgba = composite_over_background(self._current_result_rgba, (20, 20, 20))
+        elif mode == VIEW_REMOVED_PIXELS:
+            rgba = self._current_removed_pixels_rgba
+        elif mode == VIEW_STRENGTHENED_PIXELS:
+            rgba = self._current_strengthened_pixels_rgba
+
+        if rgba is None:
+            return
+        preview_rgba = downscale_for_preview(rgba, MAX_PREVIEW_DIMENSION_PX)
+        self.preview_view.set_pixmap(rgba_array_to_qpixmap(_composite_checkerboard(preview_rgba)))
+
+        if self._current_original_rgba is not None and self._current_result_rgba is not None:
+            self.compare_view.set_images(
+                rgba_array_to_qpixmap(
+                    _composite_checkerboard(downscale_for_preview(self._current_original_rgba, MAX_PREVIEW_DIMENSION_PX))
+                ),
+                rgba_array_to_qpixmap(
+                    _composite_checkerboard(downscale_for_preview(self._current_result_rgba, MAX_PREVIEW_DIMENSION_PX))
+                ),
+            )
+
+    def _on_optimize_clicked(self) -> None:
+        if not self.controller.selected_files:
+            QMessageBox.information(self, "Keine Dateien", "Bitte zuerst ein oder mehrere Bilder auswählen.")
+            return
+        if self.controller.output_dir is None:
+            QMessageBox.information(self, "Kein Ausgabeordner", "Bitte zuerst einen Ausgabeordner wählen.")
+            return
+
+        self.controller.persist_settings()
+        self.btn_optimize.setEnabled(False)
+        self.btn_cancel.setEnabled(True)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setMaximum(len(self.controller.selected_files))
+        self.summary_text.setPlainText("Verarbeitung läuft …")
+
+        self._batch_thread, self._batch_worker = run_batch_in_thread(
+            self.controller.selected_files, self.controller.settings, self.controller.output_dir, process_image_safe
+        )
+        self._batch_worker.progress.connect(self._on_batch_progress)
+        self._batch_worker.file_finished.connect(self._on_batch_file_finished)
+        self._batch_worker.finished.connect(self._on_batch_finished)
+        self._batch_worker.cancelled.connect(self._on_batch_cancelled)
+        self._batch_thread.start()
+
+    def _on_cancel_clicked(self) -> None:
+        if self._batch_worker is not None:
+            self._batch_worker.request_cancel()
+            self.btn_cancel.setEnabled(False)
+
+    def _on_batch_cancelled(self) -> None:
+        self.btn_optimize.setEnabled(True)
+        self.btn_cancel.setEnabled(False)
+        self.summary_text.setPlainText("Verarbeitung abgebrochen.")
+
+    def _on_batch_progress(self, current: int, total: int, filename: str) -> None:
+        self.progress_bar.setValue(current)
+        self.summary_text.setPlainText(f"Verarbeite {current}/{total}: {filename}")
+
+    def _on_batch_file_finished(self, report) -> None:
+        self._last_reports[str(report.source_path)] = report
+        current_row = self.file_list.currentRow()
+        if 0 <= current_row < len(self.controller.selected_files):
+            if self.controller.selected_files[current_row] == report.source_path and report.success:
+                self._load_result_preview(report)
+
+    def _load_result_preview(self, report) -> None:
+        try:
+            self._current_result_rgba = load_image(report.output_path).array
+        except Exception:
+            self._current_result_rgba = None
+
+        previews_dir = report.output_path.parent.parent / "previews"
+        stem = report.source_path.stem
+
+        softproof_path = previews_dir / f"{stem}_softproof.png"
+        self._current_softproof_rgba = self._try_load(softproof_path)
+
+        removed_path = previews_dir / f"{stem}_removed_pixels.png"
+        self._current_removed_pixels_rgba = self._try_load(removed_path)
+
+        strengthened_path = previews_dir / f"{stem}_strengthened_pixels.png"
+        self._current_strengthened_pixels_rgba = self._try_load(strengthened_path)
+
+        modes = [VIEW_ORIGINAL, VIEW_RESULT, VIEW_ALPHA_MASK, VIEW_WHITE_TEXTILE, VIEW_BLACK_TEXTILE]
+        if self._current_softproof_rgba is not None:
+            modes.insert(2, VIEW_SOFTPROOF)
+        if self._current_removed_pixels_rgba is not None:
+            modes.append(VIEW_REMOVED_PIXELS)
+        if self._current_strengthened_pixels_rgba is not None:
+            modes.append(VIEW_STRENGTHENED_PIXELS)
+        self._set_view_modes(modes)
+        self.view_mode_combo.setCurrentText(VIEW_RESULT)
+
+    @staticmethod
+    def _try_load(path: Path) -> np.ndarray | None:
+        if not path.exists():
+            return None
+        try:
+            return load_image(path).array
+        except Exception:
+            return None
+
+    def _on_batch_finished(self, summary) -> None:
+        self.btn_optimize.setEnabled(True)
+        self.btn_cancel.setEnabled(False)
+        self.btn_open_output.setEnabled(True)
+        self.summary_text.setPlainText(_format_batch_summary(summary))
+
+        if self.controller.output_dir is not None:
+            from src.core.reporting.batch_report import write_batch_summary_report
+
+            try:
+                write_batch_summary_report(summary, self.controller.output_dir / "reports")
+            except OSError:
+                logger.exception("Zusammenfassender Abschlussbericht konnte nicht geschrieben werden.")
+                self.summary_text.append(
+                    "\nHinweis: Der zusammenfassende Abschlussbericht (batch_summary.json) konnte "
+                    "nicht gespeichert werden. Die einzelnen Bilder wurden davon nicht beeinflusst."
+                )
+
+    def _on_advanced_settings_clicked(self) -> None:
+        dialog = AdvancedSettingsDialog(self.controller.settings, self)
+        if dialog.exec():
+            dialog.apply_to_settings()
+            self.controller.persist_settings()
+
+    def _on_open_output_clicked(self) -> None:
+        if self.controller.output_dir is None:
+            return
+        path = str(self.controller.output_dir)
+        if sys.platform == "win32":
+            os.startfile(path)  # noqa: S606
+        else:
+            subprocess.Popen(["xdg-open", path])
+
+
+def _composite_checkerboard(rgba: np.ndarray) -> np.ndarray:
+    h, w = rgba.shape[:2]
+    bg = checkerboard_background(w, h)
+    alpha = rgba[:, :, 3:4].astype(np.float32) / 255.0
+    out = rgba[:, :, :3].astype(np.float32) * alpha + bg[:, :, :3].astype(np.float32) * (1 - alpha)
+    result = np.dstack([out.astype(np.uint8), np.full((h, w), 255, dtype=np.uint8)])
+    return result
+
+
+_TYPE_LABELS = {
+    "hard_logo": "Logo oder Schriftzug",
+    "illustration": "Illustration/KI-Grafik",
+    "photo": "Foto",
+    "soft_shadow": "Motiv mit weichem Schatten",
+    "unknown": "unbekannter Bildtyp",
+}
+
+
+def _format_analysis_summary(result) -> str:
+    type_label = _TYPE_LABELS.get(result.detected_type.value, result.detected_type.value)
+    lines = [
+        f"Das Bild wurde als {type_label} erkannt.",
+        f"Größe: {result.width} x {result.height} px  |  Quellprofil: {result.source_profile}",
+        "",
+        "Automatisch geplante Verarbeitung:",
+    ]
+    if result.weak_alpha_count:
+        lines.append(f"- {result.weak_alpha_count} fast unsichtbare Randpixel entfernen")
+    if result.semi_transparent_count:
+        lines.append(f"- {result.semi_transparent_count} halbtransparente Pixel prüfen und bereinigen")
+    if result.likely_soft_shadow:
+        lines.append("- Weiche Schatten erkannt - werden beibehalten")
+    if result.semi_transparent_mostly_at_edges:
+        lines.append("- Farbsäume an den Kanten korrigieren")
+    if result.small_pixel_island_count:
+        lines.append(f"- {result.small_pixel_island_count} kleine Pixelinseln entfernen")
+    if result.small_hole_count:
+        lines.append(f"- {result.small_hole_count} kleine transparente Löcher schließen")
+    lines.append("- Farben für das gewählte Druckprofil anpassen")
+    lines.append("- RGB-PNG mit Transparenz für den DTF-RIP erzeugen")
+    lines.append("- Softproof-Vorschau erstellen")
+
+    if result.warnings:
+        lines.append("")
+        for w in result.warnings:
+            lines.append(f"Hinweis: {w.message}")
+
+    lines.append("")
+    lines.append("Bereit für 'Automatisch optimieren'.")
+    return "\n".join(lines)
+
+
+def _format_batch_summary(summary) -> str:
+    lines = [
+        f"Fertig: {summary.succeeded} von {summary.total_files} Dateien erfolgreich optimiert.",
+    ]
+    if summary.failed:
+        lines.append(f"{summary.failed} Datei(en) fehlgeschlagen.")
+    lines.append(f"Dauer: {summary.total_duration_seconds:.1f} s")
+    lines.append("")
+    for report in summary.reports:
+        status = "OK" if report.success else "FEHLER"
+        lines.append(f"[{status}] {Path(report.source_path).name if report.source_path else '?'}")
+        for w in report.warnings:
+            lines.append(f"   Hinweis: {w}")
+        for e in report.errors:
+            lines.append(f"   Fehler: {e}")
+    lines.append("")
+    lines.append(
+        "Hinweis: Diese Bildschirmvorschau ist keine Garantie für das endgültige Druckergebnis. "
+        "Das Ergebnis hängt zusätzlich von Drucker, Tinte, Folie/Pulver, RIP, Textil und Pressparametern ab."
+    )
+    return "\n".join(lines)
