@@ -402,9 +402,12 @@ class MainWindow(QMainWindow):
         self.summary_text.setPlainText(f"Analysiere {path.name} …")
         self._analysis_request_path = path
         self._analysis_thread, self._analysis_worker = run_analysis_in_thread(path, self.controller.settings)
-        self._analysis_worker.finished.connect(
-            lambda result, loaded, error, p=path: self._on_analysis_finished(result, loaded, error, p)
-        )
+        # Bewusst eine QObject-gebundene Methode statt einer Lambda (siehe
+        # ausführlicher Kommentar in run_analysis_in_thread) - nur so erkennt
+        # Qt die Thread-Zugehörigkeit korrekt und liefert das Signal per
+        # QueuedConnection im GUI-Thread aus, statt im Worker-Thread
+        # abzustürzen.
+        self._analysis_worker.finished.connect(self._on_analysis_finished)
         self._analysis_thread.start()
 
     def _on_analysis_finished(self, result, loaded, error, requested_path: Path) -> None:
