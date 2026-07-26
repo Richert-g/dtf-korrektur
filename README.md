@@ -110,8 +110,6 @@ python -m PyInstaller --name "DTF-Korrektur" --windowed --onedir \
 verwendet.) Das wurde in diesem Projekt nicht offiziell getestet/gepflegt -
 das primäre Zielsystem ist Windows.
 
-Da sie auf Python basiert, kann sie auch unter Linux benutzt werden.
-
 ## Funktionsumfang
 
 - **Automatische Analyse & Klassifizierung**: erkennt Logo/Schrift,
