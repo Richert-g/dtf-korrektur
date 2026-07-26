@@ -19,8 +19,8 @@ sie einfach unkontrolliert zu konvertieren.
 
 | Datei | Für wen | Link |
 |---|---|---|
-| **DTF-Korrektur-Setup.exe** | Empfohlen: normale Installation mit Startmenü-Eintrag & Uninstaller | [Download](https://github.com/Richert-g/dtf-korrektur/releases/download/v1.0.0/DTF-Korrektur-Setup.exe) |
-| **DTF-Korrektur-portable.zip** | Portabel, kein Setup nötig - einfach entpacken und starten | [Download](https://github.com/Richert-g/dtf-korrektur/releases/download/v1.0.0/DTF-Korrektur-portable.zip) |
+| **DTF-Korrektur-Setup.exe** | Empfohlen: normale Installation mit Startmenü-Eintrag & Uninstaller | [Download](https://github.com/Richert-g/dtf-korrektur/releases/latest/download/DTF-Korrektur-Setup.exe) |
+| **DTF-Korrektur-portable.zip** | Portabel, kein Setup nötig - einfach entpacken und starten | [Download](https://github.com/Richert-g/dtf-korrektur/releases/latest/download/DTF-Korrektur-portable.zip) |
 
 Alle Releases: [github.com/Richert-g/dtf-korrektur/releases](https://github.com/Richert-g/dtf-korrektur/releases)
 
