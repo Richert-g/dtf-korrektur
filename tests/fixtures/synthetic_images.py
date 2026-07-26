@@ -5,8 +5,6 @@ Alle Funktionen geben PIL.Image im Modus RGBA zurück (sofern nicht anders benan
 """
 from __future__ import annotations
 
-import io
-
 import numpy as np
 from PIL import Image, ImageCms, ImageDraw
 
@@ -137,8 +135,6 @@ def make_transparent_holes(w: int = 64, h: int = 64) -> Image.Image:
 def make_srgb_icc_bytes() -> bytes:
     profile = ImageCms.createProfile("sRGB")
     cms_profile = ImageCms.ImageCmsProfile(profile)
-    buf = io.BytesIO()
-    cms_profile.tobytes()
     return cms_profile.tobytes()
 
 

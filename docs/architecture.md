@@ -65,6 +65,21 @@ Datei -> load_image() -> analyze_alpha_channel() -> classify_image()
 Siehe `processing-pipeline.md` für Details zu jedem Schritt und
 `color-management.md` für das ICC-Farbmanagement.
 
+## Vorschau-/Zoom-Architektur
+
+`src/app/ui/zoom_pan_view.py` kapselt Zoom-/Pan-Verhalten (Mausrad-Zoom zum
+Cursor, 10-800 %, Doppelklick = einpassen, `zoom_changed`-Signal) einmalig in
+der Basisklasse `ZoomPanGraphicsView(QGraphicsView)` sowie den
+Werkzeugleisten-Widget `ZoomToolbar`. `ZoomableImageView`
+(`zoomable_view.py`, Einzelbild) und `CompareSliderWidget`
+(`compare_slider.py`, Vorher/Nachher) leiten beide davon ab, statt die
+Zoomlogik zu duplizieren. Der Vorher-Nachher-Vergleich liegt als zwei
+`QGraphicsPixmapItem`s in **einer** gemeinsamen Szene (das "Nachher"-Bild
+über ein klippendes Eltern-Item auf den Bereich links des Trenners
+begrenzt), wodurch beide Bilder durch denselben View-Transform zwangsläufig
+synchron zoomen/verschieben - ein Verrutschen zwischen den Bildern ist
+architektonisch ausgeschlossen.
+
 ## Threading-Modell
 
 - `AnalysisWorker` (QThread): analysiert ein einzelnes Bild für die Vorschau,

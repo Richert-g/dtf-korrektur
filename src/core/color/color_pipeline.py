@@ -45,6 +45,9 @@ class ColorProcessingInfo:
     target_profile: object | None = None
     rendering_intent_cms: object | None = None
     has_valid_target_profile: bool = False
+    # Pixel, die vor der automatischen Farboptimierung außerhalb des
+    # Zielfarbraums lagen (für die "Gamut-Warnung"-Vorschau).
+    out_of_gamut_mask: np.ndarray | None = None
 
 
 def _cms_intent(intent) -> ImageCms.Intent:
@@ -139,6 +142,9 @@ def optimize_colors(
 
     visible_delta = delta[visible_mask]
     out_of_gamut_before_pct = float((visible_delta > gamut_cfg.delta_e_out_of_gamut).sum() / visible_delta.size * 100)
+    # Für die "Gamut-Warnung"-Vorschau: welche Pixel lagen VOR der
+    # automatischen Optimierung außerhalb des Zielfarbraums.
+    initial_out_of_gamut_mask = (delta > gamut_cfg.delta_e_out_of_gamut) & visible_mask
 
     intent, reason = select_rendering_intent(report.detected_type, out_of_gamut_before_pct, color_cfg, gamut_cfg)
     report.rendering_intent = intent
@@ -248,5 +254,6 @@ def optimize_colors(
         target_profile=target_profile,
         rendering_intent_cms=_cms_intent(intent),
         has_valid_target_profile=True,
+        out_of_gamut_mask=initial_out_of_gamut_mask,
     )
     return out_rgba, info

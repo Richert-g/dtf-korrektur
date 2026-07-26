@@ -46,6 +46,27 @@ Im Modus `AUTO` wird anhand des erkannten Bildtyps automatisch gewählt:
 
 Alle Schwellenwerte kommen aus `AlphaThresholds` (`src/config/defaults.py`).
 
+### "Pixel löschen bis Alpha-Wert" (`weak_alpha_threshold`)
+
+Zentrale Einstellung in NOISE_ONLY und SOFT_CLEANUP: alle Pixel mit
+`0 <= Alpha <= Schwellenwert` werden vollständig transparent (inklusive
+Grenze: `alpha <= threshold`, nicht `alpha < threshold`). Standard: **241**
+(Bereich 0-254 in der Oberfläche; 255 ist nicht wählbar, da dadurch auch
+vollständig deckende Pixel gelöscht würden).
+
+Die zugrunde liegende Funktion `_remove_weak_noise` wendet diesen Wert für
+sich genommen **global** auf das gesamte Bild an - sie kennt keine
+Bildbereiche. Da 241 bewusst sehr aggressiv ist, würde eine rein globale
+Anwendung auch bewusste weiche Schattenflächen zerstören. Deshalb berechnet
+`clean_alpha` **nur im Automatikmodus** (`settings.alpha_mode == AUTO`)
+zusätzlich eine Schutzmaske über
+`core.analysis.alpha_analysis.compute_large_soft_region_mask()`: große,
+nicht überwiegend am Motivrand liegende Halbtransparenz-Flächen (typisch für
+Schatten/Rauch/Glow) werden von der Löschung ausgenommen. Wählt der Benutzer
+dagegen manuell einen konkreten Modus (z. B. "Nur Störpixel entfernen"),
+gilt der Schwellenwert bewusst für das gesamte Bild - die Oberfläche zeigt
+dafür ab einem Wert von 220 eine Warnung an (`AdvancedSettingsDialog`).
+
 ## 6. Farboptimierung / ICC (`core/color/color_pipeline.py`)
 
 Siehe `color-management.md` für Details. Kurzfassung: Quell- und Zielprofil

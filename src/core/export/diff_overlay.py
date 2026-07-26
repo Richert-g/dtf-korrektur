@@ -10,6 +10,7 @@ import numpy as np
 
 REMOVED_HIGHLIGHT_COLOR = (230, 40, 40)  # Rot: entfernte Pixel
 STRENGTHENED_HIGHLIGHT_COLOR = (40, 200, 90)  # Grün: verstärkte Pixel
+GAMUT_WARNING_HIGHLIGHT_COLOR = (230, 30, 200)  # Magenta: außerhalb des Zielfarbraums
 
 
 def generate_diff_overlay(

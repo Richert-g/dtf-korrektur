@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
-    QGroupBox,
+    QLabel,
     QLineEdit,
     QSpinBox,
     QTabWidget,
@@ -16,11 +16,18 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from src.config.defaults import ProcessingSettings
-from src.models.enums import AlphaMode, OutputFormat, RenderingIntent
+from src.config.defaults import AlphaThresholds, ProcessingSettings
+from src.models.enums import AlphaMode, RenderingIntent
 
 
 class AdvancedSettingsDialog(QDialog):
+    # 255 ist bewusst nicht wählbar: alpha <= threshold wird gelöscht, bei 255
+    # würden dadurch auch vollständig deckende Pixel entfernt.
+    WEAK_ALPHA_THRESHOLD_MIN = 0
+    WEAK_ALPHA_THRESHOLD_MAX = 254
+    # Zentral in AlphaThresholds gepflegt, hier nur wiederverwendet.
+    WEAK_ALPHA_THRESHOLD_WARNING_FROM = AlphaThresholds.weak_alpha_threshold_warning_from
+
     def __init__(self, settings: ProcessingSettings, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Erweiterte Einstellungen")
@@ -53,8 +60,40 @@ class AdvancedSettingsDialog(QDialog):
         self.alpha_mode_combo.setToolTip("AUTO wählt den Modus automatisch anhand des erkannten Bildtyps.")
         form.addRow("Alpha-Modus", self.alpha_mode_combo)
 
-        self.weak_threshold = self._spin(0, 255, a.weak_alpha_threshold, "Schwellenwert für sehr schwache Randpixel (0-255).")
-        form.addRow("Schwelle schwache Pixel", self.weak_threshold)
+        weak_container = QWidget()
+        weak_layout = QVBoxLayout(weak_container)
+        weak_layout.setContentsMargins(0, 0, 0, 0)
+        weak_layout.setSpacing(2)
+
+        self.weak_threshold = self._spin(
+            self.WEAK_ALPHA_THRESHOLD_MIN,
+            self.WEAK_ALPHA_THRESHOLD_MAX,
+            a.weak_alpha_threshold,
+            "Alle Pixel mit Alpha 0 bis einschließlich diesem Wert werden vollständig transparent "
+            "(0 = vollständig transparent, 255 = vollständig deckend).",
+        )
+        weak_layout.addWidget(self.weak_threshold)
+
+        weak_help = QLabel(
+            "Alle Pixel mit einem Alpha-Wert von 0 bis einschließlich des eingestellten Werts werden "
+            "vollständig transparent.\n0 = vollständig transparent, 255 = vollständig deckend"
+        )
+        weak_help.setWordWrap(True)
+        weak_layout.addWidget(weak_help)
+
+        self.weak_threshold_percent_label = QLabel()
+        self.weak_threshold_percent_label.setWordWrap(True)
+        weak_layout.addWidget(self.weak_threshold_percent_label)
+
+        self.weak_threshold_warning_label = QLabel()
+        self.weak_threshold_warning_label.setWordWrap(True)
+        self.weak_threshold_warning_label.setStyleSheet("color: #a15c00; font-weight: bold;")
+        weak_layout.addWidget(self.weak_threshold_warning_label)
+
+        self.weak_threshold.valueChanged.connect(self._update_weak_threshold_info)
+        self._update_weak_threshold_info(self.weak_threshold.value())
+
+        form.addRow("Pixel löschen bis Alpha-Wert", weak_container)
 
         self.near_opaque_threshold = self._spin(
             0, 255, a.near_opaque_threshold, "Ab diesem Wert gilt ein Pixel als volle Deckkraft."
@@ -74,6 +113,19 @@ class AdvancedSettingsDialog(QDialog):
         form.addRow("Kantenglättung", self.edge_feather)
 
         return w
+
+    def _update_weak_threshold_info(self, value: int) -> None:
+        percent = value / 255 * 100
+        self.weak_threshold_percent_label.setText(
+            f"{value} von 255 – Pixel bis etwa {percent:.1f} % Deckkraft werden gelöscht"
+        )
+        if value >= self.WEAK_ALPHA_THRESHOLD_WARNING_FROM:
+            self.weak_threshold_warning_label.setText(
+                "Hoher Wert: Weiche Schatten, Rauch, Glow und geglättete Kanten können entfernt werden."
+            )
+            self.weak_threshold_warning_label.show()
+        else:
+            self.weak_threshold_warning_label.hide()
 
     def _build_halo_tab(self) -> QWidget:
         w = QWidget()

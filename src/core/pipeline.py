@@ -12,8 +12,6 @@ import logging
 import time
 from pathlib import Path
 
-import numpy as np
-
 from src.config.defaults import ProcessingSettings
 from src.core.analysis.alpha_analysis import analyze_alpha_channel
 from src.core.analysis.image_loader import ImageLoadError, load_image
@@ -21,7 +19,6 @@ from src.core.color.icc_manager import get_srgb_icc_bytes
 from src.core.export.filenames import avoid_collision, build_output_paths
 from src.core.export.png_export import export_alpha_mask_png, export_rgba_png
 from src.core.reporting.report_writer import write_html_report, write_json_report
-from src.models.enums import ImageType
 from src.models.report import ImageProcessingReport
 from src.utils.fs_utils import ensure_dir
 
@@ -120,6 +117,20 @@ def process_image(path: Path, settings: ProcessingSettings, output_root: Path) -
             f"{int(strengthened_mask.sum())} verstärkte Pixel farbig markiert.",
             pixels_affected=int(removed_mask.sum() + strengthened_mask.sum()),
         )
+
+    if export.write_gamut_warning and color_info is not None and color_info.out_of_gamut_mask is not None:
+        from src.core.export.diff_overlay import GAMUT_WARNING_HIGHLIGHT_COLOR, generate_diff_overlay
+
+        gamut_mask = color_info.out_of_gamut_mask
+        if gamut_mask.any():
+            gamut_overlay = generate_diff_overlay(loaded.array, gamut_mask, GAMUT_WARNING_HIGHLIGHT_COLOR)
+            gamut_path = avoid_collision(paths.gamut_warning_png, export.overwrite_existing)
+            export_rgba_png(gamut_overlay, gamut_path, icc_profile_bytes=get_srgb_icc_bytes())
+            report.add_step(
+                "export_gamut_warning",
+                f"Gamut-Warnung erzeugt: {int(gamut_mask.sum())} Pixel lagen außerhalb des Zielfarbraums.",
+                pixels_affected=int(gamut_mask.sum()),
+            )
 
     if export.write_white_mask:
         from src.core.export.white_mask import generate_white_mask, recommend_choke_px

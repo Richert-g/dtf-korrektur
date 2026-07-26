@@ -51,7 +51,7 @@ class ImageAnalysisResult:
     """
 
     # Grunddaten
-    input_path: Path = None
+    input_path: Path | None = None
     width: int = 0
     height: int = 0
     file_format: str = ""

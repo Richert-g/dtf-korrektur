@@ -14,8 +14,16 @@ from src.models.enums import AlphaMode, OutputFormat, RenderingIntent
 class AlphaThresholds:
     """Schwellenwerte für die Alpha-Bereinigung (Prompt Abschnitt 7)."""
 
-    # Sehr schwache/nahezu unsichtbare Pixel -> werden immer entfernt
-    weak_alpha_threshold: int = 13  # ~5 % von 255
+    # "Pixel löschen bis Alpha-Wert": alle Pixel mit 0 <= Alpha <= Schwellenwert
+    # werden vollständig transparent (inklusive Grenze: alpha <= threshold).
+    # Standard 241 ist bewusst aggressiv (siehe UI-Warnung ab 220) - im
+    # Automatikmodus werden große, nicht am Motivrand liegende weiche Flächen
+    # (z. B. Schatten/Glow) davon ausgenommen, siehe
+    # core.analysis.alpha_analysis.compute_large_soft_region_mask().
+    # Zulässiger Bereich in der Oberfläche: 0-254 (255 wäre "alles löschen").
+    weak_alpha_threshold: int = 241
+    # Ab diesem Wert zeigt die Oberfläche eine Warnung vor aggressivem Löschen an
+    weak_alpha_threshold_warning_from: int = 220
     # Untere Grenze für den mittleren Bereich (5-20 %)
     mid_low_threshold: int = 13
     mid_high_threshold: int = 51  # ~20 % von 255
@@ -39,6 +47,11 @@ class AlphaThresholds:
     # Verstärkungsfaktor für "Sanfte Bereinigung" im mittleren Alpha-Band (5-20 %),
     # wenn die Pixel NICHT am Motivrand liegen (Prompt Abschnitt 7)
     soft_cleanup_strengthen_factor: float = 1.6
+    # Anteil an der Gesamtfläche, ab dem eine zusammenhängende Halbtransparenz-
+    # Region als "groß" gilt (z. B. bewusster Schatten/Glow statt Kantenrauschen).
+    # Wird sowohl für die Analyse-Statistik als auch für den Automatik-Schutz
+    # vor dem "Pixel löschen bis Alpha-Wert"-Schwellenwert verwendet.
+    large_region_area_fraction: float = 0.01
 
 
 @dataclass
@@ -100,6 +113,7 @@ class ExportSettings:
     write_white_mask: bool = False
     white_mask_choke_px: float = 0.0  # 0 = automatisch empfohlenen Wert verwenden
     write_diff_overlays: bool = True  # Vorschau: entfernte/verstärkte Pixel farbig hervorgehoben
+    write_gamut_warning: bool = True  # Vorschau: außerhalb des Zielfarbraums liegende Pixel farbig hervorgehoben
     write_json_report: bool = True
     write_html_report: bool = True
     keep_metadata: bool = False
@@ -109,6 +123,7 @@ class ExportSettings:
     filename_suffix_white_mask: str = "_white_mask"
     filename_suffix_removed_pixels: str = "_removed_pixels"
     filename_suffix_strengthened_pixels: str = "_strengthened_pixels"
+    filename_suffix_gamut_warning: str = "_gamut_warning"
     filename_suffix_report_json: str = "_report.json"
     filename_suffix_report_html: str = "_report.html"
     overwrite_existing: bool = False

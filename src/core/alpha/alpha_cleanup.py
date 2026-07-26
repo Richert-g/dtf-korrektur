@@ -1,6 +1,20 @@
 """Alpha-Bereinigung mit mehreren internen Modi (Prompt Abschnitt 7).
 
 Alle Schwellenwerte kommen zentral aus src.config.defaults.AlphaThresholds.
+
+Hinweis zu "Pixel löschen bis Alpha-Wert" (`weak_alpha_threshold`, inklusive
+Grenze: alpha <= threshold wird gelöscht): Die zugrunde liegende Funktion
+`_remove_weak_noise` wendet diesen Schwellenwert für sich genommen GLOBAL auf
+das gesamte Bild an - sie kennt keine Bildbereiche. Da der Standardwert (241)
+bewusst sehr aggressiv ist, würde eine rein globale Anwendung auch bewusste
+weiche Schattenflächen zerstören. Deshalb berechnet `clean_alpha` im
+AUTOMATIKMODUS (settings.alpha_mode == AlphaMode.AUTO) zusätzlich eine
+Schutzmaske (`compute_large_soft_region_mask`) für große, nicht am Motivrand
+liegende Halbtransparenz-Flächen und nimmt diese von der Löschung aus. Wählt
+der Benutzer dagegen manuell einen konkreten Modus (z. B. "Nur Störpixel
+entfernen"), wird der Schwellenwert bewusst weiterhin auf das gesamte Bild
+angewendet - die Oberfläche zeigt dafür eine Warnung an (siehe
+AdvancedSettingsDialog).
 """
 from __future__ import annotations
 
@@ -10,7 +24,7 @@ import cv2
 import numpy as np
 
 from src.config.defaults import AlphaThresholds, ProcessingSettings
-from src.core.analysis.alpha_analysis import motif_edge_band_mask
+from src.core.analysis.alpha_analysis import compute_large_soft_region_mask, motif_edge_band_mask
 from src.models.enums import AlphaMode, ImageType
 from src.models.report import ImageProcessingReport
 
@@ -35,9 +49,14 @@ def _mode_for_image_type(image_type: ImageType) -> AlphaMode:
     }[image_type]
 
 
-def _remove_weak_noise(alpha: np.ndarray, thresholds: AlphaThresholds) -> tuple[np.ndarray, int]:
+def _remove_weak_noise(
+    alpha: np.ndarray, thresholds: AlphaThresholds, protect_mask: np.ndarray | None = None
+) -> tuple[np.ndarray, int]:
     out = alpha.copy()
+    # Inklusive Grenze wie gefordert: alpha <= threshold wird gelöscht (NICHT alpha < threshold).
     weak_mask = (alpha > 0) & (alpha <= thresholds.weak_alpha_threshold)
+    if protect_mask is not None:
+        weak_mask = weak_mask & ~protect_mask
     out[weak_mask] = 0
     return out, int(weak_mask.sum())
 
@@ -119,12 +138,14 @@ def _apply_hard_edge(rgba: np.ndarray, thresholds: AlphaThresholds) -> tuple[np.
     return out, removed, strengthened, removed_islands, closed_holes
 
 
-def _apply_soft_cleanup(rgba: np.ndarray, thresholds: AlphaThresholds) -> tuple[np.ndarray, int, int]:
+def _apply_soft_cleanup(
+    rgba: np.ndarray, thresholds: AlphaThresholds, protect_mask: np.ndarray | None = None
+) -> tuple[np.ndarray, int, int]:
     out = rgba.copy()
     original_alpha = rgba[:, :, 3]
     a = out[:, :, 3].copy()
 
-    a, removed = _remove_weak_noise(a, thresholds)
+    a, removed = _remove_weak_noise(a, thresholds, protect_mask)
 
     near_opaque_mask = (original_alpha >= thresholds.near_opaque_threshold) & (original_alpha < 255)
     a[near_opaque_mask] = 255
@@ -155,16 +176,30 @@ def clean_alpha(
     report: ImageProcessingReport | None = None,
 ) -> AlphaCleanupResult:
     thresholds = settings.alpha
+    is_auto = settings.alpha_mode == AlphaMode.AUTO
     mode = settings.alpha_mode
     if mode == AlphaMode.AUTO:
         mode = _mode_for_image_type(image_type)
 
+    # Schutz großer, bewusster weicher Flächen (Schatten/Glow) vor dem
+    # "Pixel löschen bis Alpha-Wert"-Schwellenwert - nur im Automatikmodus.
+    # Im manuell gewählten Modus darf der Benutzer den Wert ausdrücklich auf
+    # das gesamte Bild anwenden (siehe Moduldokumentation oben).
+    protect_mask = None
+    protected_pixel_count = 0
+    if is_auto and mode in (AlphaMode.NOISE_ONLY, AlphaMode.SOFT_CLEANUP):
+        protect_mask = compute_large_soft_region_mask(rgba[:, :, 3], thresholds)
+        if not protect_mask.any():
+            protect_mask = None
+        else:
+            protected_pixel_count = int(protect_mask.sum())
+
     if mode == AlphaMode.NOISE_ONLY:
         out = rgba.copy()
-        out[:, :, 3], removed = _remove_weak_noise(out[:, :, 3], thresholds)
+        out[:, :, 3], removed = _remove_weak_noise(out[:, :, 3], thresholds, protect_mask)
         result = AlphaCleanupResult(rgba=out, mode_used=mode, removed_pixel_count=removed)
     elif mode == AlphaMode.SOFT_CLEANUP:
-        out, removed, strengthened = _apply_soft_cleanup(rgba, thresholds)
+        out, removed, strengthened = _apply_soft_cleanup(rgba, thresholds, protect_mask)
         result = AlphaCleanupResult(
             rgba=out, mode_used=mode, removed_pixel_count=removed, strengthened_pixel_count=strengthened
         )
@@ -209,6 +244,13 @@ def clean_alpha(
                 "alpha_cleanup_holes",
                 f"{result.closed_holes} kleine transparente Löcher geschlossen.",
                 pixels_affected=result.closed_holes,
+            )
+        if protected_pixel_count:
+            report.add_step(
+                "alpha_cleanup_shadow_protection",
+                f"{protected_pixel_count} Pixel einer erkannten weichen Fläche (z. B. Schatten/Glow) "
+                "wurden vor dem Löschen über den Alpha-Schwellenwert geschützt.",
+                pixels_affected=protected_pixel_count,
             )
 
     return result

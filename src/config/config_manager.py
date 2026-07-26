@@ -7,7 +7,7 @@ import logging
 from enum import Enum
 from pathlib import Path
 
-from src.config.defaults import ProcessingSettings, DEFAULT_SETTINGS
+from src.config.defaults import ProcessingSettings
 from src.config.paths import get_config_file
 
 logger = logging.getLogger(__name__)
@@ -33,11 +33,9 @@ def _from_jsonable(cls, data):
     if dataclasses.is_dataclass(cls):
         kwargs = {}
         field_types = {f.name: f.type for f in dataclasses.fields(cls)}
-        defaults = {f.name: f for f in dataclasses.fields(cls)}
         for name, value in (data or {}).items():
             if name not in field_types:
                 continue
-            ftype = defaults[name].type
             resolved = _resolve_type(cls, name)
             if resolved is not None and dataclasses.is_dataclass(resolved):
                 kwargs[name] = _from_jsonable(resolved, value)

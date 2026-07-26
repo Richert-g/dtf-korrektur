@@ -44,7 +44,7 @@ def test_black_motif_gray_edge_pulled_towards_black():
 
 def test_illustration_soft_edge_runs_without_error():
     arr = _arr(make_illustration_soft_edge())
-    corrected, changed = correct_halo(arr, THRESH, report=None)
+    corrected, _changed = correct_halo(arr, THRESH, report=None)
     assert corrected.shape == arr.shape
 
 

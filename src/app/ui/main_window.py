@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon, QKeySequence, QShortcut
+from PySide6.QtGui import QFontMetrics, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -33,13 +33,14 @@ from src.app.controllers.main_controller import MainController
 from src.app.ui.advanced_settings_dialog import AdvancedSettingsDialog
 from src.app.ui.compare_slider import CompareSliderWidget
 from src.app.ui.drop_area import DropArea
+from src.app.ui.zoom_pan_view import ZoomToolbar
 from src.app.ui.zoomable_view import ZoomableImageView
 from src.app.workers.analysis_worker import run_analysis_in_thread
 from src.app.workers.pipeline_worker import run_batch_in_thread
+from src.config.defaults import MAX_PREVIEW_DIMENSION_PX
 from src.core.analysis.image_loader import load_image
 from src.core.pipeline import process_image_safe
 from src.models.enums import PresetName
-from src.config.defaults import MAX_PREVIEW_DIMENSION_PX
 from src.utils.image_qt import (
     checkerboard_background,
     composite_over_background,
@@ -50,13 +51,53 @@ from src.utils.image_qt import (
 logger = logging.getLogger(__name__)
 
 VIEW_ORIGINAL = "Original"
-VIEW_RESULT = "Ergebnis"
+VIEW_RESULT = "Optimiertes Ergebnis"
 VIEW_SOFTPROOF = "Softproof"
 VIEW_ALPHA_MASK = "Alpha-Maske"
 VIEW_WHITE_TEXTILE = "Auf weißem Textil"
 VIEW_BLACK_TEXTILE = "Auf schwarzem Textil"
 VIEW_REMOVED_PIXELS = "Entfernte Pixel"
 VIEW_STRENGTHENED_PIXELS = "Verstärkte Pixel"
+VIEW_GAMUT_WARNING = "Gamut-Warnung"
+VIEW_WHITE_MASK = "Weißunterlegungsmaske"
+
+# Vollständige Liste aller möglichen Bezeichnungen - dient als Grundlage für
+# die dynamische Mindestbreite des "Ansicht"-Auswahlfelds (siehe
+# _compute_view_combo_min_width), unabhängig davon, welche Einträge im
+# aktuellen Zustand tatsächlich angezeigt werden.
+ALL_VIEW_MODE_LABELS = [
+    VIEW_ORIGINAL,
+    VIEW_RESULT,
+    VIEW_SOFTPROOF,
+    VIEW_ALPHA_MASK,
+    VIEW_WHITE_TEXTILE,
+    VIEW_BLACK_TEXTILE,
+    VIEW_REMOVED_PIXELS,
+    VIEW_STRENGTHENED_PIXELS,
+    VIEW_GAMUT_WARNING,
+    VIEW_WHITE_MASK,
+]
+
+# Fallback-Mindestbreite (Prompt-Vorgabe: ca. 190-220px), falls die
+# schriftbasierte Messung aus irgendeinem Grund einen zu kleinen Wert liefert.
+VIEW_COMBO_FALLBACK_MIN_WIDTH_PX = 220
+# Zusätzlicher Platz für Dropdown-Pfeil, Innenabstand und Scrollbar im Popup,
+# damit auch das aufgeklappte Dropdown nicht abschneidet.
+VIEW_COMBO_EXTRA_WIDTH_PX = 56
+
+
+def _compute_view_combo_min_width(combo: QComboBox, candidate_labels: list[str]) -> int:
+    """Ermittelt eine Mindestbreite, die den längsten Eintrag vollständig anzeigt.
+
+    Verwendet die tatsächlichen (DPI-/skalierungsabhängigen) Schriftmetriken
+    des Auswahlfelds, damit die Breite auch bei 100/125/150 % Windows-
+    Anzeigeskalierung ausreicht - Qt skaliert Schriftgrößen für solche
+    Einstellungen automatisch, `QFontMetrics` misst also bereits die
+    tatsächlich auf dem Bildschirm benötigte Breite.
+    """
+    metrics = QFontMetrics(combo.font())
+    longest_text_width = max((metrics.horizontalAdvance(text) for text in candidate_labels), default=0)
+    return max(VIEW_COMBO_FALLBACK_MIN_WIDTH_PX, longest_text_width + VIEW_COMBO_EXTRA_WIDTH_PX)
 
 
 class MainWindow(QMainWindow):
@@ -82,6 +123,8 @@ class MainWindow(QMainWindow):
         self._current_softproof_rgba: np.ndarray | None = None
         self._current_removed_pixels_rgba: np.ndarray | None = None
         self._current_strengthened_pixels_rgba: np.ndarray | None = None
+        self._current_gamut_warning_rgba: np.ndarray | None = None
+        self._current_white_mask_rgba: np.ndarray | None = None
         self._last_reports: dict[str, object] = {}
 
         self._build_ui()
@@ -140,6 +183,9 @@ class MainWindow(QMainWindow):
         view_row.addWidget(QLabel("Ansicht:"))
         self.view_mode_combo = QComboBox()
         self.view_mode_combo.addItems([VIEW_ORIGINAL])
+        combo_min_width = _compute_view_combo_min_width(self.view_mode_combo, ALL_VIEW_MODE_LABELS)
+        self.view_mode_combo.setMinimumWidth(combo_min_width)
+        self.view_mode_combo.view().setMinimumWidth(combo_min_width)
         view_row.addWidget(self.view_mode_combo)
         view_row.addStretch(1)
         layout.addLayout(view_row)
@@ -147,8 +193,25 @@ class MainWindow(QMainWindow):
         self.preview_tabs = QTabWidget()
         self.preview_view = ZoomableImageView()
         self.compare_view = CompareSliderWidget()
-        self.preview_tabs.addTab(self.preview_view, "Vorschau")
-        self.preview_tabs.addTab(self.compare_view, "Vorher / Nachher")
+
+        self.preview_toolbar = ZoomToolbar()
+        self.preview_toolbar.bind(self.preview_view)
+        preview_tab = QWidget()
+        preview_tab_layout = QVBoxLayout(preview_tab)
+        preview_tab_layout.setContentsMargins(0, 0, 0, 0)
+        preview_tab_layout.addWidget(self.preview_toolbar)
+        preview_tab_layout.addWidget(self.preview_view, stretch=1)
+
+        self.compare_toolbar = ZoomToolbar()
+        self.compare_toolbar.bind(self.compare_view)
+        compare_tab = QWidget()
+        compare_tab_layout = QVBoxLayout(compare_tab)
+        compare_tab_layout.setContentsMargins(0, 0, 0, 0)
+        compare_tab_layout.addWidget(self.compare_toolbar)
+        compare_tab_layout.addWidget(self.compare_view, stretch=1)
+
+        self.preview_tabs.addTab(preview_tab, "Vorschau")
+        self.preview_tabs.addTab(compare_tab, "Vorher / Nachher")
         layout.addWidget(self.preview_tabs, stretch=1)
 
         return panel
@@ -284,6 +347,8 @@ class MainWindow(QMainWindow):
             self._current_softproof_rgba = None
             self._current_removed_pixels_rgba = None
             self._current_strengthened_pixels_rgba = None
+            self._current_gamut_warning_rgba = None
+            self._current_white_mask_rgba = None
             self._set_view_modes([VIEW_ORIGINAL])
             self.summary_text.setPlainText("Keine Dateien ausgewählt.")
 
@@ -353,6 +418,8 @@ class MainWindow(QMainWindow):
         self._current_softproof_rgba = None
         self._current_removed_pixels_rgba = None
         self._current_strengthened_pixels_rgba = None
+        self._current_gamut_warning_rgba = None
+        self._current_white_mask_rgba = None
         self._set_view_modes([VIEW_ORIGINAL])
         self.summary_text.setPlainText(_format_analysis_summary(result))
 
@@ -375,6 +442,10 @@ class MainWindow(QMainWindow):
             rgba = self._current_removed_pixels_rgba
         elif mode == VIEW_STRENGTHENED_PIXELS:
             rgba = self._current_strengthened_pixels_rgba
+        elif mode == VIEW_GAMUT_WARNING:
+            rgba = self._current_gamut_warning_rgba
+        elif mode == VIEW_WHITE_MASK:
+            rgba = self._current_white_mask_rgba
 
         if rgba is None:
             return
@@ -454,6 +525,13 @@ class MainWindow(QMainWindow):
         strengthened_path = previews_dir / f"{stem}_strengthened_pixels.png"
         self._current_strengthened_pixels_rgba = self._try_load(strengthened_path)
 
+        gamut_warning_path = previews_dir / f"{stem}_gamut_warning.png"
+        self._current_gamut_warning_rgba = self._try_load(gamut_warning_path)
+
+        masks_dir = report.output_path.parent.parent / "masks"
+        white_mask_path = masks_dir / f"{stem}_white_mask.png"
+        self._current_white_mask_rgba = self._try_load(white_mask_path)
+
         modes = [VIEW_ORIGINAL, VIEW_RESULT, VIEW_ALPHA_MASK, VIEW_WHITE_TEXTILE, VIEW_BLACK_TEXTILE]
         if self._current_softproof_rgba is not None:
             modes.insert(2, VIEW_SOFTPROOF)
@@ -461,6 +539,10 @@ class MainWindow(QMainWindow):
             modes.append(VIEW_REMOVED_PIXELS)
         if self._current_strengthened_pixels_rgba is not None:
             modes.append(VIEW_STRENGTHENED_PIXELS)
+        if self._current_gamut_warning_rgba is not None:
+            modes.append(VIEW_GAMUT_WARNING)
+        if self._current_white_mask_rgba is not None:
+            modes.append(VIEW_WHITE_MASK)
         self._set_view_modes(modes)
         self.view_mode_combo.setCurrentText(VIEW_RESULT)
 
@@ -534,7 +616,7 @@ def _format_analysis_summary(result) -> str:
         "Automatisch geplante Verarbeitung:",
     ]
     if result.weak_alpha_count:
-        lines.append(f"- {result.weak_alpha_count} fast unsichtbare Randpixel entfernen")
+        lines.append(f"- {result.weak_alpha_count} Randpixel mit geringer Deckkraft entfernen (bis zum eingestellten Alpha-Wert)")
     if result.semi_transparent_count:
         lines.append(f"- {result.semi_transparent_count} halbtransparente Pixel prüfen und bereinigen")
     if result.likely_soft_shadow:

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from PIL import ImageCms
 
-from src.config.paths import get_user_profiles_dir, get_profiles_dir
+from src.config.paths import get_profiles_dir, get_user_profiles_dir
 
 logger = logging.getLogger(__name__)
 

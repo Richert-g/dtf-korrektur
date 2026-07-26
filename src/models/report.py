@@ -19,7 +19,7 @@ class ProcessingStepLog:
 
 @dataclass
 class ImageProcessingReport:
-    source_path: Path = None
+    source_path: Path | None = None
     output_path: Path | None = None
 
     width: int = 0

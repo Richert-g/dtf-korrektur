@@ -25,5 +25,5 @@ def test_high_out_of_gamut_forces_perceptual_even_for_logo():
 
 def test_manual_intent_overrides_auto_selection():
     manual_cfg = ColorManagementSettings(auto_select_intent=False, rendering_intent=RenderingIntent.SATURATION)
-    intent, reason = select_rendering_intent(ImageType.PHOTO, 50.0, manual_cfg, GAMUT_CFG)
+    intent, _reason = select_rendering_intent(ImageType.PHOTO, 50.0, manual_cfg, GAMUT_CFG)
     assert intent == RenderingIntent.SATURATION

@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 from src.config.defaults import ProcessingSettings
 from src.core.analysis.image_loader import load_image
@@ -45,7 +44,7 @@ def test_invalid_target_profile_path_falls_back_gracefully(tmp_path: Path):
     settings.color.target_profile_path = str(tmp_path / "does_not_exist.icc")
     report = _make_report()
 
-    out, info = optimize_colors(loaded.array, loaded, settings, report)
+    out, _info = optimize_colors(loaded.array, loaded, settings, report)
 
     assert out.shape == loaded.array.shape
     assert any("konnte nicht geladen werden" in w for w in report.warnings)
@@ -87,5 +86,39 @@ def test_fully_transparent_image_skips_color_processing(tmp_path: Path):
     settings.color.target_profile_path = str(target_icc_path)
     report = _make_report()
 
-    out, info = optimize_colors(loaded.array, loaded, settings, report)
+    out, _info = optimize_colors(loaded.array, loaded, settings, report)
     assert out.shape == loaded.array.shape
+
+
+def test_out_of_gamut_mask_exposed_for_gamut_warning_preview(tmp_path: Path):
+    img = make_saturated_out_of_gamut()
+    p = tmp_path / "img.png"
+    img.save(p)
+    loaded = load_image(p)
+
+    target_icc_path = tmp_path / "target_srgb_copy.icc"
+    target_icc_path.write_bytes(get_srgb_icc_bytes())
+
+    settings = ProcessingSettings()
+    settings.color.target_profile_path = str(target_icc_path)
+    report = _make_report(ImageType.ILLUSTRATION)
+
+    _, info = optimize_colors(loaded.array, loaded, settings, report)
+
+    assert info.out_of_gamut_mask is not None
+    assert info.out_of_gamut_mask.shape == loaded.array.shape[:2]
+    assert info.out_of_gamut_mask.dtype == bool
+
+
+def test_out_of_gamut_mask_none_without_target_profile(tmp_path: Path):
+    img = make_saturated_out_of_gamut()
+    p = tmp_path / "img.png"
+    img.save(p)
+    loaded = load_image(p)
+
+    settings = ProcessingSettings()
+    settings.color.target_profile_path = None
+    report = _make_report()
+
+    _, info = optimize_colors(loaded.array, loaded, settings, report)
+    assert info.out_of_gamut_mask is None

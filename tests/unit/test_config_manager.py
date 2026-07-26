@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 from src.config.config_manager import settings_from_dict, settings_to_dict
 from src.config.defaults import ProcessingSettings

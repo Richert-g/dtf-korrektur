@@ -1,0 +1,17 @@
+[tool.ruff]
+line-length = 160
+target-version = "py312"
+
+[tool.ruff.lint]
+# Bewusst auf tatsächliche Fehlerquellen fokussiert (nicht verwendete
+# Importe/Variablen, Importreihenfolge, ungenutzte unpacked-Variablen) statt
+# auf reine Stilfragen (Zeilenlänge, Enum-Basisklassen, String-Konkatenation),
+# um bestehenden, funktionierenden Code nicht großflächig umformatieren zu
+# müssen.
+select = ["F", "I", "RUF059"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = false

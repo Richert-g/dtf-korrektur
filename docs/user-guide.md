@@ -16,15 +16,39 @@
 ## Vorschau-Ansichten
 
 Über die Ansicht-Auswahl oben in der Vorschau stehen nach der Optimierung
-zur Verfügung: Original, Ergebnis, Softproof (falls Zielprofil gewählt),
-Alpha-Maske, Auf weißem/schwarzem Textil sowie zwei Diff-Ansichten:
+zur Verfügung: Original, Optimiertes Ergebnis, Softproof (falls Zielprofil
+gewählt), Alpha-Maske, Auf weißem/schwarzem Textil sowie:
 
 - **Entfernte Pixel**: zeigt das (abgedunkelte) Originalbild mit allen durch
   die Alpha-Bereinigung entfernten Pixeln in Rot hervorgehoben.
 - **Verstärkte Pixel**: dieselbe Darstellung in Grün für Pixel, die von
   teiltransparent auf volle Deckkraft gesetzt wurden.
+- **Gamut-Warnung**: Pixel, die vor der automatischen Farboptimierung
+  außerhalb des Zielfarbraums lagen, in Magenta hervorgehoben (nur bei
+  gewähltem Zielprofil und tatsächlich vorhandenen Out-of-Gamut-Pixeln).
+- **Weißunterlegungsmaske**: die exportierte Weißunterlegungs-Vorschau (nur
+  wenn in den erweiterten Einstellungen aktiviert).
 
 So lässt sich genau nachvollziehen, welche Pixel die Automatik verändert hat.
+Das Auswahlfeld ist automatisch breit genug für den längsten Eintrag
+("Weißunterlegungsmaske") - keine abgeschnittenen Texte, auch bei höherer
+Windows-Anzeigeskalierung.
+
+### Zoomen und Verschieben in der Vorschau
+
+Gilt einheitlich für die Einzelansicht und die Vorher-/Nachher-Vergleichsansicht:
+
+- **Mausrad**: hinein-/herauszoomen (10 % bis 800 %), der Bildpunkt unter dem
+  Mauszeiger bleibt dabei an derselben Stelle. Die Seite scrollt dabei nicht mit.
+- **Ziehen mit gedrückter Maustaste**: verschiebt das Bild (bei der
+  Vergleichsansicht: außerhalb des Trennerbereichs).
+- **Doppelklick**: passt die Ansicht wieder ans Fenster an.
+- Buttons **"Ansicht einpassen"** und **"100 %"** sowie eine Anzeige des
+  aktuellen Zoomwerts (z. B. "125 %") stehen oberhalb jeder Vorschau bereit.
+- In der Vergleichsansicht liegen beide Bilder in derselben Szene und
+  zoomen/verschieben sich dadurch zwangsläufig synchron - sie können nicht
+  gegeneinander verrutschen. Der rote Trenner lässt sich weiterhin per Ziehen
+  verschieben.
 
 ## Mitgelieferte ICC-Profile
 
@@ -55,6 +79,24 @@ für Drucker/Folie/Pulver (siehe Hinweise unten).
 Schwarzpunktkompensation, maximale Sättigungsreduktion, Export-Optionen
 (Alpha-Maske, Weißunterlegung, CMYK-Vorschau, Metadaten, Überschreibverhalten).
 Jede Einstellung hat einen Tooltip.
+
+### "Pixel löschen bis Alpha-Wert"
+
+Löscht alle Pixel mit Alpha-Wert 0 bis einschließlich des eingestellten
+Werts vollständig (0 = vollständig transparent, 255 = vollständig deckend).
+Zusätzlich wird eine Prozentangabe angezeigt (z. B. "241 von 255 - Pixel bis
+etwa 94,5 % Deckkraft werden gelöscht"). Standardwert: **241** (bewusst
+aggressiv). Wählbarer Bereich: 0-254 - 255 ist nicht wählbar, da dadurch auch
+vollständig deckende Pixel gelöscht würden.
+
+Ab einem Wert von 220 erscheint der Hinweis: "Hoher Wert: Weiche Schatten,
+Rauch, Glow und geglättete Kanten können entfernt werden." Im
+**Automatikmodus** (Preset "DTF Auto" bzw. Alpha-Modus "Auto") schützt die
+Anwendung erkannte große, weiche Flächen (Schatten/Rauch/Glow) automatisch
+vor diesem Schwellenwert. Wird dagegen im Alpha-Modus **manuell** ein
+konkreter Modus gewählt (z. B. "Nur Störpixel entfernen"), gilt der
+Schwellenwert bewusst für das gesamte Bild - inklusive möglicher weicher
+Flächen.
 
 ## Eigene ICC-Profile hinzufügen
 
@@ -98,3 +140,9 @@ Jede Einstellung hat einen Tooltip.
   Hilfsdateien, keine produktionsfertigen RIP-Daten.
 - **PSD-Ebenen** werden nicht einzeln unterstützt - Pillow liest PSD-Dateien
   nur als zusammengeführtes Composite-Bild.
+- **Bereits gespeicherte Einstellungen** (`%LOCALAPPDATA%\DTFKorrektur\settings.json`)
+  behalten beim Programm-Update ihren bisherigen Wert - z. B. übernimmt eine
+  bereits existierende Installation nicht automatisch den neuen
+  Standardwert 241 für "Pixel löschen bis Alpha-Wert". Zum Zurücksetzen auf
+  die aktuellen Standardwerte die Datei löschen (App dabei geschlossen
+  lassen) oder den Wert manuell in den erweiterten Einstellungen anpassen.

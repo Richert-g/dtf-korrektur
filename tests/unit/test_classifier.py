@@ -8,7 +8,6 @@ from tests.fixtures.synthetic_images import (
     make_large_soft_shadow,
     make_logo_with_white_halo,
     make_no_alpha_image,
-    make_saturated_out_of_gamut,
 )
 
 ALPHA_THRESH = AlphaThresholds()

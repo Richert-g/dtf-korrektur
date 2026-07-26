@@ -1,7 +1,6 @@
 """Export der DTF-Hauptausgabe: RGB-PNG mit Transparenz (Prompt Abschnitt 16)."""
 from __future__ import annotations
 
-import io
 from pathlib import Path
 
 import numpy as np
