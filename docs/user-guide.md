@@ -50,6 +50,34 @@ Gilt einheitlich für die Einzelansicht und die Vorher-/Nachher-Vergleichsansich
   gegeneinander verrutschen. Der rote Trenner lässt sich weiterhin per Ziehen
   verschieben.
 
+### Farbpicker in der Vorher-/Nachher-Ansicht
+
+Über den Button **"Farbpicker"** oberhalb der Vergleichsansicht aktivieren.
+Solange aktiv, verschiebt ein Klick auf das Bild nicht mehr den Trenner,
+sondern zeigt darunter für genau diese Bildposition den Farbcode **vorher**
+und **nachher** an - jeweils mit Farbfläche, Hex-Code (`#RRGGBB`), RGB-Werten
+und Alpha-Wert. So lässt sich exakt nachvollziehen, wie sich ein einzelnes
+Pixel durch die Verarbeitung verändert hat. Die Werte stammen aus der vollen
+Bildauflösung, nicht aus der (ggf. herunterskalierten) Bildschirmvorschau.
+Erneut auf den Button klicken, um zum normalen Trenner-Verhalten
+zurückzukehren.
+
+## Ausgabeformat
+
+Über das Feld **"Ausgabeformat"** im rechten Bereich lässt sich unabhängig
+vom Preset wählen, welche Datei "Automatisch optimieren" erzeugt:
+
+| Format | Transparenz | Eignung |
+|---|---|---|
+| PNG | Ja | Standard, verlustfrei, für die meisten DTF-RIPs geeignet |
+| TIFF | Ja | Verlustfrei, alternative zu PNG (z. B. für Workflows, die TIFF erwarten) |
+| JPEG | Nein - wird auf Weiß geflacht | Kleinere Dateigröße, nur wenn Transparenz nicht benötigt wird |
+| PDF | Ja (als Softmask) | Druckfertige, einseitige CMYK-PDF - erfordert ein gültiges CMYK-ICC-Zielprofil, siehe DTF-King-Preset oben |
+
+Wird PDF gewählt (egal ob per Preset oder manuell über dieses Feld), öffnet
+sich vor dem Export derselbe Dialog wie beim DTF-King-Preset (Profilprüfung,
+Druckgröße/dpi, Zusammenfassung).
+
 ## Mitgelieferte ICC-Profile
 
 Die Anwendung bringt bereits eine Auswahl gängiger, frei verwendbarer

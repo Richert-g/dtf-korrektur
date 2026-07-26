@@ -48,6 +48,10 @@ class ColorProcessingInfo:
     # Pixel, die vor der automatischen Farboptimierung außerhalb des
     # Zielfarbraums lagen (für die "Gamut-Warnung"-Vorschau).
     out_of_gamut_mask: np.ndarray | None = None
+    # Das tatsächlich verwendete Quellprofil-Objekt (nicht nur der Name) -
+    # wird für eine spätere, eigenständige CMYK-Konvertierung beim
+    # PDF-Ausgabeformat benötigt (siehe core.color.cmyk_convert).
+    source_profile: object | None = None
 
 
 def _cms_intent(intent) -> ImageCms.Intent:
@@ -107,7 +111,7 @@ def optimize_colors(
             report.warnings.append(
                 "Kein ICC-Zielprofil ausgewählt. Es wurde keine Farbraum-Anpassung an ein Druckprofil vorgenommen."
             )
-        info = ColorProcessingInfo(source_name, report.target_profile, None, None)
+        info = ColorProcessingInfo(source_name, report.target_profile, None, None, source_profile=source_profile)
         return rgba, info
 
     target_name = profile_description(target_profile)
@@ -277,5 +281,6 @@ def optimize_colors(
         rendering_intent_cms=_cms_intent(intent),
         has_valid_target_profile=True,
         out_of_gamut_mask=initial_out_of_gamut_mask,
+        source_profile=source_profile,
     )
     return out_rgba, info

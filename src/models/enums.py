@@ -38,6 +38,8 @@ class WarningSeverity(str, Enum):
 
 class OutputFormat(str, Enum):
     PNG_RGB = "png_rgb"
+    TIFF_RGB = "tiff_rgb"
+    JPEG_RGB = "jpeg_rgb"
     CMYK_TIFF = "cmyk_tiff"
     SOFTPROOF_PNG = "softproof_png"
     ALPHA_MASK_PNG = "alpha_mask_png"

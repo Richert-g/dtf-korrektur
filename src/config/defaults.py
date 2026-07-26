@@ -112,6 +112,10 @@ class ClassificationThresholds:
 @dataclass
 class ExportSettings:
     output_format: OutputFormat = OutputFormat.PNG_RGB
+    # Nur für output_format = JPEG_RGB relevant: JPEG kennt keine Transparenz,
+    # das Bild wird vor dem Speichern auf diese Volltonfarbe geflacht.
+    jpeg_quality: int = 95
+    jpeg_background_rgb: tuple[int, int, int] = (255, 255, 255)
     write_cmyk_tiff: bool = False
     write_softproof_preview: bool = True
     write_alpha_mask: bool = False

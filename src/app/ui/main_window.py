@@ -70,6 +70,14 @@ VIEW_ORIGINAL_SOURCE = "Original – Quellfarbraum"
 VIEW_TRANSPARENCY_ONLY = "Transparenzoptimiert – Farben unverändert"
 VIEW_DTF_KING_SOFTPROOF = "DTF-King Softproof – ISO Coated v2"
 
+# Vom Benutzer frei wählbares Hauptausgabeformat, unabhängig vom Preset.
+OUTPUT_FORMAT_CHOICES = [
+    ("PNG (mit Transparenz)", OutputFormat.PNG_RGB),
+    ("TIFF (verlustfrei, mit Transparenz)", OutputFormat.TIFF_RGB),
+    ("JPEG (ohne Transparenz)", OutputFormat.JPEG_RGB),
+    ("PDF (CMYK, druckfertig – erfordert ICC-Zielprofil)", OutputFormat.PDF_CMYK),
+]
+
 # Vollständige Liste aller möglichen Bezeichnungen - dient als Grundlage für
 # die dynamische Mindestbreite des "Ansicht"-Auswahlfelds (siehe
 # _compute_view_combo_min_width), unabhängig davon, welche Einträge im
@@ -142,6 +150,7 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self._connect_signals()
+        self._refresh_output_format_combo()
 
         if self.controller.startup_warnings:
             QMessageBox.warning(self, "Hinweis zu gespeicherten Einstellungen", "\n".join(self.controller.startup_warnings))
@@ -220,11 +229,28 @@ class MainWindow(QMainWindow):
 
         self.compare_toolbar = ZoomToolbar()
         self.compare_toolbar.bind(self.compare_view)
+
+        self.btn_color_picker = QPushButton("Farbpicker")
+        self.btn_color_picker.setCheckable(True)
+        self.btn_color_picker.setToolTip(
+            "Aktivieren, dann auf ein Pixel im Vorher/Nachher-Vergleich klicken, "
+            "um dessen Farbcode vorher und nachher anzuzeigen."
+        )
+        compare_toolbar_layout = self.compare_toolbar.layout()
+        assert compare_toolbar_layout is not None
+        compare_toolbar_layout.addWidget(self.btn_color_picker)
+
+        self.picker_result_label = QLabel("Farbpicker aktivieren und auf ein Pixel klicken.")
+        self.picker_result_label.setTextFormat(Qt.TextFormat.RichText)
+        self.picker_result_label.setWordWrap(True)
+        self.picker_result_label.setStyleSheet("padding: 4px;")
+
         compare_tab = QWidget()
         compare_tab_layout = QVBoxLayout(compare_tab)
         compare_tab_layout.setContentsMargins(0, 0, 0, 0)
         compare_tab_layout.addWidget(self.compare_toolbar)
         compare_tab_layout.addWidget(self.compare_view, stretch=1)
+        compare_tab_layout.addWidget(self.picker_result_label)
 
         self.preview_tabs.addTab(preview_tab, "Vorschau")
         self.preview_tabs.addTab(compare_tab, "Vorher / Nachher")
@@ -252,6 +278,14 @@ class MainWindow(QMainWindow):
         preset_layout.addWidget(QLabel("ICC-Zielprofil:"))
         preset_layout.addLayout(profile_row)
         layout.addWidget(preset_group)
+
+        format_group = QGroupBox("Ausgabeformat")
+        format_layout = QHBoxLayout(format_group)
+        self.output_format_combo = QComboBox()
+        for label, fmt in OUTPUT_FORMAT_CHOICES:
+            self.output_format_combo.addItem(label, fmt)
+        format_layout.addWidget(self.output_format_combo, stretch=1)
+        layout.addWidget(format_group)
 
         output_group = QGroupBox("Ausgabeordner")
         output_layout = QHBoxLayout(output_group)
@@ -300,9 +334,12 @@ class MainWindow(QMainWindow):
         self.btn_remove_selected.clicked.connect(self._on_remove_selected_clicked)
         self.btn_clear_list.clicked.connect(self._on_clear_list_clicked)
         self.preset_combo.currentIndexChanged.connect(self._on_preset_changed)
+        self.output_format_combo.currentIndexChanged.connect(self._on_output_format_changed)
         self.profile_combo.currentIndexChanged.connect(self._on_profile_changed)
         self.btn_import_profile.clicked.connect(self._on_import_profile_clicked)
         self.view_mode_combo.currentTextChanged.connect(self._on_view_mode_changed)
+        self.btn_color_picker.toggled.connect(self.compare_view.set_picker_mode)
+        self.compare_view.pixel_picked.connect(self._on_compare_pixel_picked)
         self.btn_optimize.clicked.connect(self._on_optimize_clicked)
         self.btn_cancel.clicked.connect(self._on_cancel_clicked)
         self.btn_advanced.clicked.connect(self._on_advanced_settings_clicked)
@@ -391,6 +428,25 @@ class MainWindow(QMainWindow):
         preset = self.preset_combo.currentData()
         if preset is not None:
             self.controller.apply_preset(preset)
+            self._refresh_output_format_combo()
+
+    def _refresh_output_format_combo(self) -> None:
+        """Hält die Ausgabeformat-Auswahl mit settings.export.output_format synchron,
+        z. B. nachdem ein Preset (etwa DTF-King) das Format selbst gesetzt hat."""
+        idx = self.output_format_combo.findData(self.controller.settings.export.output_format)
+        if idx >= 0:
+            self.output_format_combo.blockSignals(True)
+            self.output_format_combo.setCurrentIndex(idx)
+            self.output_format_combo.blockSignals(False)
+
+    def _on_output_format_changed(self) -> None:
+        fmt = self.output_format_combo.currentData()
+        if fmt is not None:
+            # OutputFormat erbt von str: QComboBox.currentData() liefert dafür
+            # in PySide6 mitunter ein reines str-Objekt statt des Enum-Members
+            # zurück (derselbe Effekt wie beim RenderingIntent-Absturz in
+            # advanced_settings_dialog.py) - explizit re-wrappen.
+            self.controller.settings.export.output_format = OutputFormat(fmt)
 
     def _on_profile_changed(self) -> None:
         path = self.profile_combo.currentData()
@@ -487,6 +543,29 @@ class MainWindow(QMainWindow):
                     _composite_checkerboard(downscale_for_preview(self._current_result_rgba, MAX_PREVIEW_DIMENSION_PX))
                 ),
             )
+
+    def _on_compare_pixel_picked(self, fx: float, fy: float) -> None:
+        """Zeigt Vorher-/Nachher-Farbcode für die angeklickte Bildposition an.
+
+        `fx`/`fy` sind normiert (0..1) und werden auf die ORIGINAL-/Ergebnis-
+        Arrays in voller Auflösung umgerechnet - unabhängig davon, wie stark
+        die angezeigte Vorschau herunterskaliert ist, damit der angezeigte
+        Farbcode exakt dem tatsächlichen Pixelwert entspricht.
+        """
+        if self._current_original_rgba is None or self._current_result_rgba is None:
+            self.picker_result_label.setText("Kein Vorher/Nachher-Ergebnis verfügbar.")
+            return
+
+        before_h, before_w = self._current_original_rgba.shape[:2]
+        after_h, after_w = self._current_result_rgba.shape[:2]
+        bx = min(before_w - 1, max(0, int(fx * before_w)))
+        by = min(before_h - 1, max(0, int(fy * before_h)))
+        ax = min(after_w - 1, max(0, int(fx * after_w)))
+        ay = min(after_h - 1, max(0, int(fy * after_h)))
+
+        before_px = self._current_original_rgba[by, bx]
+        after_px = self._current_result_rgba[ay, ax]
+        self.picker_result_label.setText(_format_picker_result(bx, by, before_px, after_px))
 
     def _on_optimize_clicked(self) -> None:
         if not self.controller.selected_files:
@@ -638,6 +717,30 @@ class MainWindow(QMainWindow):
             os.startfile(path)  # noqa: S606
         else:
             subprocess.Popen(["xdg-open", path])
+
+
+def _rgba_to_hex(px: np.ndarray) -> str:
+    return f"#{int(px[0]):02X}{int(px[1]):02X}{int(px[2]):02X}"
+
+
+def _color_swatch_html(px: np.ndarray) -> str:
+    hex_code = _rgba_to_hex(px)
+    return (
+        f'<span style="background-color:{hex_code}; border:1px solid #888; '
+        f'padding:0 12px; margin-right:4px;">&nbsp;</span>'
+    )
+
+
+def _format_picker_result(x: int, y: int, before_px: np.ndarray, after_px: np.ndarray) -> str:
+    before_hex = _rgba_to_hex(before_px)
+    after_hex = _rgba_to_hex(after_px)
+    return (
+        f"<b>Position:</b> ({x}, {y})<br>"
+        f"<b>Vorher:</b> {_color_swatch_html(before_px)} {before_hex} &nbsp; "
+        f"RGB({before_px[0]}, {before_px[1]}, {before_px[2]}) &nbsp; Alpha={before_px[3]}<br>"
+        f"<b>Nachher:</b> {_color_swatch_html(after_px)} {after_hex} &nbsp; "
+        f"RGB({after_px[0]}, {after_px[1]}, {after_px[2]}) &nbsp; Alpha={after_px[3]}"
+    )
 
 
 def _composite_checkerboard(rgba: np.ndarray) -> np.ndarray:
