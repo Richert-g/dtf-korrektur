@@ -5,6 +5,8 @@ Eine lokale Windows-Desktop-Anwendung, die Bilder automatisch für DTF-Druck
 Farbsäume korrigieren, Farben ans Druckprofil anpassen. Läuft vollständig
 lokal, keine Cloud-Übertragung von Bilddaten.
 
+Da sie auf Python basiert, kann sie auch unter Linux benutzt werden.
+
 ## Funktionsumfang
 
 - **Automatische Analyse & Klassifizierung**: erkennt Logo/Schrift,
