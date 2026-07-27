@@ -110,6 +110,51 @@ python -m PyInstaller --name "DTF-Korrektur" --windowed --onedir \
 verwendet.) Das wurde in diesem Projekt nicht offiziell getestet/gepflegt -
 das primäre Zielsystem ist Windows.
 
+## Unter macOS zum Laufen bringen
+
+Die `.exe`/der Installer sind Windows-spezifisch und laufen unter macOS
+nicht. Die Anwendung ist aber reines Python + PySide6/Qt und läuft auf macOS
+problemlos **aus dem Quellcode** - sowohl auf Intel- als auch auf
+Apple-Silicon-Macs (M1/M2/M3/…), da alle Abhängigkeiten native arm64-Wheels
+mitbringen:
+
+```bash
+git clone https://github.com/Richert-g/dtf-korrektur.git
+cd dtf-korrektur
+
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+
+python -m src.app.main
+```
+
+Python 3.12 fehlt auf macOS meist von Haus aus - am einfachsten per
+[Homebrew](https://brew.sh) installieren: `brew install python@3.12`. Extra
+Qt-Systembibliotheken wie unter Linux sind **nicht** nötig, PySide6 bringt
+seine eigenen Qt-Frameworks mit.
+
+Tests laufen ebenso plattformunabhängig: `pytest tests/ -v`
+
+Lokale Einstellungen/Profile landen mangels `%LOCALAPPDATA%` automatisch
+unter `~/.dtf_korrektur/` - keine gesonderte Konfiguration nötig.
+
+Wer ein eigenständiges `.app`-Bundle möchte, kann PyInstaller auch unter
+macOS verwenden:
+
+```bash
+python -m PyInstaller --name "DTF-Korrektur" --windowed --onedir \
+    --paths . --add-data "resources:resources" src/app/main.py
+```
+
+Das erzeugte `dist/DTF-Korrektur.app` ist unsigniert - macOS Gatekeeper
+blockiert es beim ersten Start ("nicht verifizierter Entwickler"). Abhilfe:
+im Finder mit Rechtsklick → "Öffnen" statt Doppelklick, oder
+`xattr -dr com.apple.quarantine dist/DTF-Korrektur.app` im Terminal. Auch das
+wurde in diesem Projekt nicht offiziell getestet/gepflegt - das primäre
+Zielsystem ist Windows.
+
 ## Funktionsumfang
 
 **Bildimport & Analyse**
