@@ -175,6 +175,10 @@ class ColorManagementSettings:
 
 @dataclass
 class ProcessingSettings:
+    # App-weite Einstellung (nicht bildspezifisch): prüft beim Programmstart
+    # im Hintergrund, ob auf GitHub eine neuere Version veröffentlicht wurde
+    # (siehe core.update.update_check). Rein informativ, kein Auto-Download.
+    check_for_updates_enabled: bool = True
     alpha_mode: AlphaMode = AlphaMode.AUTO
     alpha: AlphaThresholds = field(default_factory=AlphaThresholds)
     halo: HaloThresholds = field(default_factory=HaloThresholds)

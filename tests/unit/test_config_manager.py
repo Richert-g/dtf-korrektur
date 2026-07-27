@@ -31,6 +31,18 @@ def test_roundtrip_modified_settings():
     assert restored.color.rendering_intent == RenderingIntent.PERCEPTUAL
 
 
+def test_roundtrip_check_for_updates_enabled():
+    settings = ProcessingSettings()
+    assert settings.check_for_updates_enabled is True
+    settings.check_for_updates_enabled = False
+
+    data = settings_to_dict(settings)
+    json_str = json.dumps(data)
+    restored = settings_from_dict(json.loads(json_str))
+
+    assert restored.check_for_updates_enabled is False
+
+
 def test_roundtrip_threshold_order():
     settings = ProcessingSettings()
     settings.alpha.threshold_order = AlphaThresholdOrder.STRENGTHEN_FIRST

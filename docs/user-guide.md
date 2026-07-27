@@ -307,6 +307,26 @@ ICC-Zielprofil nicht mehr auffindbar oder beschädigt, erscheint beim Start
 ein Hinweisfenster und die Einstellung wird automatisch zurückgesetzt, statt
 unbemerkt mit einem ungültigen Profil weiterzuarbeiten.
 
+## Automatischer Update-Check
+
+Beim Programmstart prüft die App im Hintergrund (ohne die Oberfläche zu
+blockieren), ob auf GitHub eine neuere Version veröffentlicht wurde - dazu
+wird eine einzelne, anonyme Anfrage an die öffentliche GitHub-Releases-API
+gesendet, es werden keine persönlichen Daten übertragen. Ist eine neuere
+Version verfügbar, erscheint ein gelber Hinweisstreifen am oberen Fensterrand
+mit zwei Schaltflächen:
+
+- **"Version anzeigen"**: öffnet die Release-Seite auf GitHub im Standard-
+  Browser. Es wird nichts automatisch heruntergeladen oder installiert - das
+  Herunterladen und Ausführen des neuen Installers bleibt eine bewusste,
+  manuelle Aktion.
+- **"Nicht mehr automatisch prüfen"**: deaktiviert den Update-Check
+  dauerhaft (gespeichert in den Einstellungen).
+
+Ist kein Internetzugang vorhanden oder GitHub nicht erreichbar, wird der
+Check stillschweigend übersprungen - es erscheint keine Fehlermeldung und
+die App funktioniert normal weiter.
+
 ## Wichtige Hinweise (keine falschen Versprechen)
 
 - Eine Bildschirmvorschau ist **keine Garantie** für das endgültige

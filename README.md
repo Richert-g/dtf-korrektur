@@ -209,6 +209,11 @@ Zusätzlich optional exportierbar: Alpha-Maske, Weißunterlegungs-Vorschau,
 CMYK-TIFF-Vorschau, sowie ein technischer JSON- und ein verständlicher
 HTML-Bericht pro Bild (inkl. zusammenfassendem Stapelbericht).
 
+**Update-Check**
+Prüft beim Start unaufdringlich im Hintergrund gegen die öffentliche
+GitHub-Releases-API, ob eine neuere Version verfügbar ist (kein
+Auto-Download, keine persönlichen Daten, jederzeit abschaltbar).
+
 Ausführliche Erklärung aller Funktionen: [docs/user-guide.md](docs/user-guide.md)
 
 ## Dokumentation

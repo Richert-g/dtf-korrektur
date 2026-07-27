@@ -8,12 +8,13 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QFontMetrics, QIcon, QKeySequence, QShortcut
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices, QFontMetrics, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QFileDialog,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -37,10 +38,12 @@ from src.app.ui.zoom_pan_view import ZoomToolbar
 from src.app.ui.zoomable_view import ZoomableImageView
 from src.app.workers.analysis_worker import run_analysis_in_thread
 from src.app.workers.pipeline_worker import run_batch_in_thread
+from src.app.workers.update_check_worker import run_update_check_in_thread
 from src.config.defaults import MAX_PREVIEW_DIMENSION_PX
 from src.core.analysis.image_loader import load_image
 from src.core.export.dtf_king_export import process_image_for_dtf_king_pdf_safe
 from src.core.pipeline import process_image_safe
+from src.core.update.update_check import UpdateCheckResult
 from src.models.enums import OutputFormat, PresetName
 from src.utils.image_qt import (
     checkerboard_background,
@@ -48,6 +51,7 @@ from src.utils.image_qt import (
     downscale_for_preview,
     rgba_array_to_qpixmap,
 )
+from src.version import APP_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +150,9 @@ class MainWindow(QMainWindow):
         self._current_white_mask_rgba: np.ndarray | None = None
         self._current_transparency_only_rgba: np.ndarray | None = None
         self._last_reports: dict[str, object] = {}
+        self._update_check_thread = None
+        self._update_check_worker = None
+        self._latest_release_url: str | None = None
 
         self._build_ui()
         self._connect_signals()
@@ -154,19 +161,50 @@ class MainWindow(QMainWindow):
         if self.controller.startup_warnings:
             QMessageBox.warning(self, "Hinweis zu gespeicherten Einstellungen", "\n".join(self.controller.startup_warnings))
 
+        if self.controller.settings.check_for_updates_enabled:
+            self._start_update_check()
+
     # ------------------------------------------------------------------ UI
     def _build_ui(self) -> None:
         central = QWidget()
         self.setCentralWidget(central)
-        root_layout = QHBoxLayout(central)
+        root_layout = QVBoxLayout(central)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.update_banner = self._build_update_banner()
+        root_layout.addWidget(self.update_banner)
+
+        splitter_row = QHBoxLayout()
+        root_layout.addLayout(splitter_row)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        root_layout.addWidget(splitter)
+        splitter_row.addWidget(splitter)
 
         splitter.addWidget(self._build_left_panel())
         splitter.addWidget(self._build_center_panel())
         splitter.addWidget(self._build_right_panel())
         splitter.setSizes([260, 700, 320])
+
+    def _build_update_banner(self) -> QWidget:
+        """Unaufdringlicher Hinweisstreifen, der nur sichtbar wird, wenn der
+        Update-Check (siehe _start_update_check) eine neuere Version findet."""
+        banner = QFrame()
+        banner.setFrameShape(QFrame.Shape.StyledPanel)
+        banner.setStyleSheet("background-color: #fff3cd; border-bottom: 1px solid #ffc107;")
+        banner.setVisible(False)
+        layout = QHBoxLayout(banner)
+        layout.setContentsMargins(10, 6, 10, 6)
+
+        self.update_banner_label = QLabel("")
+        self.update_banner_label.setWordWrap(True)
+        layout.addWidget(self.update_banner_label, stretch=1)
+
+        self.btn_show_update = QPushButton("Version anzeigen")
+        self.btn_dismiss_update = QPushButton("Nicht mehr automatisch prüfen")
+        layout.addWidget(self.btn_show_update)
+        layout.addWidget(self.btn_dismiss_update)
+
+        return banner
 
     def _build_left_panel(self) -> QWidget:
         panel = QWidget()
@@ -344,6 +382,33 @@ class MainWindow(QMainWindow):
         self.btn_cancel.clicked.connect(self._on_cancel_clicked)
         self.btn_advanced.clicked.connect(self._on_advanced_settings_clicked)
         self.btn_open_output.clicked.connect(self._on_open_output_clicked)
+        self.btn_show_update.clicked.connect(self._on_show_update_clicked)
+        self.btn_dismiss_update.clicked.connect(self._on_dismiss_update_clicked)
+
+    # ------------------------------------------------------------ Update-Check
+    def _start_update_check(self) -> None:
+        self._update_check_thread, self._update_check_worker = run_update_check_in_thread(APP_VERSION)
+        self._update_check_worker.finished.connect(self._on_update_check_finished)
+        self._update_check_thread.start()
+
+    def _on_update_check_finished(self, result: UpdateCheckResult) -> None:
+        if not result.update_available or not result.latest_version:
+            return
+        self._latest_release_url = result.release_url
+        self.update_banner_label.setText(
+            f"Eine neue Version ist verfügbar: {result.latest_version} (installiert: v{APP_VERSION})."
+        )
+        self.btn_show_update.setEnabled(self._latest_release_url is not None)
+        self.update_banner.setVisible(True)
+
+    def _on_show_update_clicked(self) -> None:
+        if self._latest_release_url:
+            QDesktopServices.openUrl(QUrl(self._latest_release_url))
+
+    def _on_dismiss_update_clicked(self) -> None:
+        self.controller.settings.check_for_updates_enabled = False
+        self.controller.persist_settings()
+        self.update_banner.setVisible(False)
 
     # ------------------------------------------------------------- Helpers
     def _reload_profiles(self) -> None:
