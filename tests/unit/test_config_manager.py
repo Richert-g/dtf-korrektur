@@ -1,6 +1,8 @@
 import json
 
-from src.config.config_manager import settings_from_dict, settings_to_dict
+import pytest
+
+from src.config.config_manager import settings_from_dict, settings_from_dict_strict, settings_to_dict
 from src.config.defaults import ProcessingSettings
 from src.models.enums import AlphaMode, AlphaThresholdOrder, RenderingIntent
 
@@ -52,6 +54,16 @@ def test_roundtrip_threshold_order():
     restored = settings_from_dict(json.loads(json_str))
 
     assert restored.alpha.threshold_order == AlphaThresholdOrder.STRENGTHEN_FIRST
+
+
+def test_settings_from_dict_falls_back_to_defaults_on_malformed_data():
+    restored = settings_from_dict({"alpha_mode": "does_not_exist_as_enum_value"})
+    assert restored == ProcessingSettings()
+
+
+def test_settings_from_dict_strict_raises_on_malformed_data():
+    with pytest.raises(ValueError):
+        settings_from_dict_strict({"alpha_mode": "does_not_exist_as_enum_value"})
 
 
 def test_settings_to_dict_is_json_serializable():

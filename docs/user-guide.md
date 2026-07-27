@@ -119,6 +119,27 @@ für Drucker/Folie/Pulver (siehe Hinweise unten).
 | DTF-King – ISO Coated v2 (ECI) | Druckfertige CMYK-PDF für den Druckdienstleister DTF-King |
 | Benutzerdefiniert | Vollständig manuelle Steuerung |
 
+## Eigene, benutzerdefinierte Presets
+
+Die aktuell eingestellte Konfiguration (Alpha-/Halo-/Farbeinstellungen,
+ICC-Zielprofil, Ausgabeformat usw. - eine vollständige Momentaufnahme) lässt
+sich unter einem selbst gewählten Namen speichern und jederzeit über dieselbe
+Preset-Auswahl wieder anwenden:
+
+- **"Als Preset speichern…"**: fragt nach einem Namen und speichert die
+  aktuelle Konfiguration. Existiert der Name bereits, wird nachgefragt, ob
+  überschrieben werden soll. Namen von eingebauten Presets (z. B. "DTF Auto")
+  sind nicht erlaubt.
+- Eigene Presets erscheinen in der Preset-Auswahl unterhalb einer Trennlinie,
+  nach den eingebauten Presets.
+- **"Presets verwalten…"**: öffnet eine Liste aller eigenen Presets zum
+  **Umbenennen** oder **Löschen**.
+
+Anders als die eingebauten Presets (die nur gezielt einzelne Einstellungen
+ändern) speichert ein eigenes Preset **alle** Einstellungen als
+Momentaufnahme - beim erneuten Anwenden wird die komplette Konfiguration
+durch die gespeicherte ersetzt.
+
 ## Preset "DTF-King – ISO Coated v2 (ECI)"
 
 Erzeugt statt eines RGB-PNGs eine **einseitige, druckfertige CMYK-PDF** mit

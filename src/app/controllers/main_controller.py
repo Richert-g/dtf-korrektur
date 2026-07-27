@@ -71,6 +71,20 @@ class MainController:
         self.current_preset = preset
         _apply_preset(self.settings, preset)
 
+    def apply_custom_preset(self, name: str) -> None:
+        """Wendet ein benutzerdefiniertes, vom Benutzer gespeichertes Preset an
+        (volle Momentaufnahme statt gezielter Feldänderungen, siehe
+        core.presets.custom_presets). `current_preset` bleibt unverändert, da
+        es strikt auf die eingebauten PresetName-Werte typisiert ist und
+        aktuell an keiner Stelle für benutzerdefinierte Presets ausgewertet
+        wird."""
+        from src.core.presets.custom_presets import apply_custom_preset as _apply_custom_preset
+        from src.core.presets.custom_presets import load_custom_presets
+
+        custom_settings = load_custom_presets().get(name)
+        if custom_settings is not None:
+            _apply_custom_preset(self.settings, custom_settings)
+
     def persist_settings(self) -> None:
         save_settings(self.settings)
 

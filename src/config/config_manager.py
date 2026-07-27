@@ -60,9 +60,18 @@ def settings_to_dict(settings: ProcessingSettings) -> dict:
     return _to_jsonable(settings)
 
 
+def settings_from_dict_strict(data: dict) -> ProcessingSettings:
+    """Wie settings_from_dict, wirft aber bei einem Parse-Fehler statt auf
+    Standardwerte zurückzufallen - für Aufrufer, die einen Fehler selbst
+    behandeln wollen (siehe core.presets.custom_presets: dort soll ein
+    einzelnes defektes benutzerdefiniertes Preset übersprungen werden,
+    statt es unbemerkt durch Standardwerte zu ersetzen)."""
+    return _from_jsonable(ProcessingSettings, data)
+
+
 def settings_from_dict(data: dict) -> ProcessingSettings:
     try:
-        return _from_jsonable(ProcessingSettings, data)
+        return settings_from_dict_strict(data)
     except Exception:
         logger.exception("Konnte gespeicherte Einstellungen nicht laden, verwende Standardwerte.")
         return ProcessingSettings()

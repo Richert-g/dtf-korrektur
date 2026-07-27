@@ -195,7 +195,9 @@ Zielsystem ist Windows.
 **Presets**
 DTF Auto, Logo und Schrift, Illustration, Foto, weicher Schatten, Nur
 Transparenz, Nur Farben, **DTF-King - ISO Coated v2 (ECI)** (siehe unten),
-Benutzerdefiniert.
+Benutzerdefiniert. Zusätzlich lässt sich die aktuelle Konfiguration als
+**eigenes, selbst benanntes Preset speichern**, verwalten (umbenennen/
+löschen) und jederzeit wieder anwenden.
 
 **Ausgabeformat** - frei wählbar, unabhängig vom Preset:
 - **PNG** (Standard, mit Transparenz) / **TIFF** (verlustfrei, mit Transparenz)

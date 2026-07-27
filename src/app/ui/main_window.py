@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QMainWindow,
     QMessageBox,
@@ -32,6 +33,7 @@ from PySide6.QtWidgets import (
 from src.app.controllers.main_controller import MainController
 from src.app.ui.advanced_settings_dialog import AdvancedSettingsDialog
 from src.app.ui.compare_slider import CompareSliderWidget
+from src.app.ui.custom_preset_manager_dialog import CustomPresetManagerDialog
 from src.app.ui.drop_area import DropArea, DropListWidget, collect_supported_files
 from src.app.ui.dtf_king_export_dialog import DtfKingExportDialog
 from src.app.ui.zoom_pan_view import ZoomToolbar
@@ -302,9 +304,15 @@ class MainWindow(QMainWindow):
         preset_group = QGroupBox("Druckprofil / Preset")
         preset_layout = QVBoxLayout(preset_group)
         self.preset_combo = QComboBox()
-        for preset in PresetName:
-            self.preset_combo.addItem(preset.value, preset)
+        self._reload_preset_combo()
         preset_layout.addWidget(self.preset_combo)
+
+        custom_preset_row = QHBoxLayout()
+        self.btn_save_custom_preset = QPushButton("Als Preset speichern…")
+        self.btn_manage_custom_presets = QPushButton("Presets verwalten…")
+        custom_preset_row.addWidget(self.btn_save_custom_preset)
+        custom_preset_row.addWidget(self.btn_manage_custom_presets)
+        preset_layout.addLayout(custom_preset_row)
 
         profile_row = QHBoxLayout()
         self.profile_combo = QComboBox()
@@ -387,6 +395,8 @@ class MainWindow(QMainWindow):
         self.btn_show_update.clicked.connect(self._on_show_update_clicked)
         self.btn_dismiss_update.clicked.connect(self._on_dismiss_update_clicked)
         self.btn_hot_folder.clicked.connect(self._on_hot_folder_clicked)
+        self.btn_save_custom_preset.clicked.connect(self._on_save_custom_preset_clicked)
+        self.btn_manage_custom_presets.clicked.connect(self._on_manage_custom_presets_clicked)
 
     # ------------------------------------------------------------ Update-Check
     def _start_update_check(self) -> None:
@@ -501,11 +511,87 @@ class MainWindow(QMainWindow):
             self.controller.set_output_dir(Path(folder))
             self.output_label.setText(folder)
 
+    def _reload_preset_combo(self, select: PresetName | str | None = None) -> None:
+        """Baut die Preset-Auswahl neu auf: eingebaute Presets (PresetName-
+        Enum, siehe presets.py), darunter - falls vorhanden - durch eine
+        Trennlinie abgesetzt die benutzerdefinierten Presets (Name als str
+        gespeichert, siehe core.presets.custom_presets). `select` erlaubt,
+        nach dem Neuaufbau gezielt einen bestimmten Eintrag auszuwählen (z. B.
+        das gerade gespeicherte oder umbenannte Preset)."""
+        from src.core.presets.custom_presets import load_custom_presets
+
+        self.preset_combo.blockSignals(True)
+        self.preset_combo.clear()
+        for preset in PresetName:
+            self.preset_combo.addItem(preset.value, preset)
+
+        custom_names = sorted(load_custom_presets())
+        if custom_names:
+            self.preset_combo.insertSeparator(self.preset_combo.count())
+            for name in custom_names:
+                self.preset_combo.addItem(name, name)
+
+        if select is not None:
+            idx = self.preset_combo.findData(select)
+            if idx >= 0:
+                self.preset_combo.setCurrentIndex(idx)
+        self.preset_combo.blockSignals(False)
+
     def _on_preset_changed(self) -> None:
         preset = self.preset_combo.currentData()
-        if preset is not None:
-            self.controller.apply_preset(preset)
-            self._refresh_output_format_combo()
+        if preset is None:
+            return
+        # PresetName erbt von str: QComboBox.currentData() liefert dafuer in
+        # PySide6 mitunter ein reines str-Objekt statt des Enum-Members
+        # zurueck (derselbe Effekt wie beim RenderingIntent-Absturz in
+        # advanced_settings_dialog.py) - ueber PresetName(...) re-wrappen
+        # statt isinstance() zu pruefen, das waere sonst faelschlich False.
+        try:
+            builtin_preset = PresetName(preset)
+        except ValueError:
+            builtin_preset = None
+
+        if builtin_preset is not None:
+            self.controller.apply_preset(builtin_preset)
+        else:
+            # Kein eingebautes Preset -> muss der Name eines
+            # benutzerdefinierten Presets sein (siehe _reload_preset_combo).
+            self.controller.apply_custom_preset(str(preset))
+        self._refresh_output_format_combo()
+
+    def _on_save_custom_preset_clicked(self) -> None:
+        from src.core.presets.custom_presets import CustomPresetError, load_custom_presets, save_custom_preset
+
+        name, ok = QInputDialog.getText(self, "Preset speichern", "Name für das neue Preset:")
+        if not ok or not name.strip():
+            return
+
+        existing = load_custom_presets()
+        overwrite = False
+        if any(existing_name.lower() == name.strip().lower() for existing_name in existing):
+            answer = QMessageBox.question(
+                self,
+                "Preset überschreiben?",
+                f"Ein benutzerdefiniertes Preset namens '{name.strip()}' existiert bereits. Überschreiben?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            overwrite = True
+
+        try:
+            cleaned = save_custom_preset(name, self.controller.settings, overwrite=overwrite)
+        except CustomPresetError as exc:
+            QMessageBox.warning(self, "Preset konnte nicht gespeichert werden", str(exc))
+            return
+
+        self._reload_preset_combo(select=cleaned)
+
+    def _on_manage_custom_presets_clicked(self) -> None:
+        dialog = CustomPresetManagerDialog(self)
+        dialog.exec()
+        if dialog.changed:
+            self._reload_preset_combo()
 
     def _refresh_output_format_combo(self) -> None:
         """Hält die Ausgabeformat-Auswahl mit settings.export.output_format synchron,
