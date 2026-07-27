@@ -1,13 +1,37 @@
-"""Drag-and-drop-Bereich für Bilder und Ordner."""
+"""Drag-and-drop-Bereiche für Bilder und Ordner (Drop-Zone und Dateiliste)."""
 from __future__ import annotations
 
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QDragEnterEvent, QDropEvent
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
+from PySide6.QtWidgets import QLabel, QListWidget, QVBoxLayout, QWidget
 
 from src.config.defaults import SUPPORTED_IMPORT_FORMATS
+
+
+def collect_supported_files(paths: list[Path]) -> list[Path]:
+    """Sammelt aus einer Liste von Dateien/Ordnern alle unterstützten Bilddateien
+    (Ordner werden rekursiv durchsucht). Wird von DropArea, DropListWidget und
+    dem "Ordner auswählen"-Button gemeinsam genutzt."""
+    result: list[Path] = []
+    for p in paths:
+        if p.is_dir():
+            for child in sorted(p.rglob("*")):
+                if child.is_file() and child.suffix.lower() in SUPPORTED_IMPORT_FORMATS:
+                    result.append(child)
+        elif p.is_file() and p.suffix.lower() in SUPPORTED_IMPORT_FORMATS:
+            result.append(p)
+    return result
+
+
+def _urls_to_paths(event) -> list[Path]:
+    paths = []
+    for url in event.mimeData().urls():
+        local = url.toLocalFile()
+        if local:
+            paths.append(Path(local))
+    return paths
 
 
 class DropArea(QWidget):
@@ -37,23 +61,39 @@ class DropArea(QWidget):
             event.acceptProposedAction()
 
     def dropEvent(self, event: QDropEvent) -> None:  # noqa: N802
-        paths = []
-        for url in event.mimeData().urls():
-            local = url.toLocalFile()
-            if local:
-                paths.append(Path(local))
-        collected = self._collect_supported_files(paths)
+        collected = collect_supported_files(_urls_to_paths(event))
         if collected:
             self.files_dropped.emit(collected)
 
-    @staticmethod
-    def _collect_supported_files(paths: list[Path]) -> list[Path]:
-        result: list[Path] = []
-        for p in paths:
-            if p.is_dir():
-                for child in sorted(p.rglob("*")):
-                    if child.is_file() and child.suffix.lower() in SUPPORTED_IMPORT_FORMATS:
-                        result.append(child)
-            elif p.is_file() and p.suffix.lower() in SUPPORTED_IMPORT_FORMATS:
-                result.append(p)
-        return result
+
+class DropListWidget(QListWidget):
+    """QListWidget, das zusätzlich zur normalen Dateiauswahl auch Drag & Drop
+    von Dateien/Ordnern direkt auf die Liste entgegennimmt - wie DropArea,
+    nur eben auch über der bereits ausgewählten Liste statt nur der
+    gestrichelten Box darüber."""
+
+    files_dropped = Signal(list)  # list[Path]
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # noqa: N802
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event: QDragMoveEvent) -> None:  # noqa: N802
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragMoveEvent(event)
+
+    def dropEvent(self, event: QDropEvent) -> None:  # noqa: N802
+        if not event.mimeData().hasUrls():
+            super().dropEvent(event)
+            return
+        collected = collect_supported_files(_urls_to_paths(event))
+        if collected:
+            self.files_dropped.emit(collected)

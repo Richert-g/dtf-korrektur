@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QListWidget,
     QMainWindow,
     QMessageBox,
     QProgressBar,
@@ -32,7 +31,7 @@ from PySide6.QtWidgets import (
 from src.app.controllers.main_controller import MainController
 from src.app.ui.advanced_settings_dialog import AdvancedSettingsDialog
 from src.app.ui.compare_slider import CompareSliderWidget
-from src.app.ui.drop_area import DropArea
+from src.app.ui.drop_area import DropArea, DropListWidget, collect_supported_files
 from src.app.ui.dtf_king_export_dialog import DtfKingExportDialog
 from src.app.ui.zoom_pan_view import ZoomToolbar
 from src.app.ui.zoomable_view import ZoomableImageView
@@ -184,7 +183,7 @@ class MainWindow(QMainWindow):
         layout.addLayout(btn_row)
 
         layout.addWidget(QLabel("Ausgewählte Dateien:"))
-        self.file_list = QListWidget()
+        self.file_list = DropListWidget()
         self.file_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         layout.addWidget(self.file_list, stretch=1)
 
@@ -327,6 +326,7 @@ class MainWindow(QMainWindow):
 
     def _connect_signals(self) -> None:
         self.drop_area.files_dropped.connect(self._on_files_selected)
+        self.file_list.files_dropped.connect(self._on_files_selected)
         self.btn_select_file.clicked.connect(self._on_select_file_clicked)
         self.btn_select_folder.clicked.connect(self._on_select_folder_clicked)
         self.btn_select_output.clicked.connect(self._on_select_output_clicked)
@@ -416,7 +416,7 @@ class MainWindow(QMainWindow):
     def _on_select_folder_clicked(self) -> None:
         folder = QFileDialog.getExistingDirectory(self, "Ordner auswählen")
         if folder:
-            self._on_files_selected(DropArea._collect_supported_files([Path(folder)]))
+            self._on_files_selected(collect_supported_files([Path(folder)]))
 
     def _on_select_output_clicked(self) -> None:
         folder = QFileDialog.getExistingDirectory(self, "Ausgabeordner auswählen")
