@@ -46,6 +46,58 @@ def test_full_export_succeeds_and_validates(tmp_path: Path):
     assert report.mirrored is False
 
 
+def test_softproof_and_transparency_only_previews_are_written(tmp_path: Path):
+    """Regression: nach einem erfolgreichen DTF-King-Export gab es keine
+    Bildvorschau in der Oberfläche - nur eine Textzeile. Beide Vorschaudateien
+    müssen mit denselben Dateinamen wie im normalen PNG-Ablauf entstehen,
+    damit die Oberfläche sie ohne Sonderfall automatisch findet."""
+    src = tmp_path / "motif.png"
+    make_saturated_blue_cyan_motif().save(src)
+    settings = _dtf_king_settings()
+
+    report = process_image_for_dtf_king_pdf(src, settings, tmp_path / "out")
+    assert report.success is True
+
+    previews_dir = tmp_path / "out" / "previews"
+    softproof_path = previews_dir / "motif_softproof.png"
+    transparency_only_path = previews_dir / "motif_transparency_only.png"
+    assert softproof_path.exists()
+    assert transparency_only_path.exists()
+
+    from PIL import Image
+
+    with Image.open(softproof_path) as img:
+        assert img.mode == "RGBA"
+        assert img.size == (report.width, report.height)
+
+    step_names = {s.name for s in report.applied_steps}
+    assert "export_softproof" in step_names
+    assert "export_transparency_only" in step_names
+
+
+def test_softproof_preview_shows_the_actual_gamut_mapped_colors(tmp_path: Path):
+    """Die Softproof-Vorschau muss die tatsächlich gedruckten (CMYK-
+    konvertierten) Farben zeigen, nicht die unveränderten Originalfarben -
+    für ein stark gesättigtes Motiv muss sich mindestens ein Pixelwert
+    sichtbar unterscheiden."""
+    import numpy as np
+    from PIL import Image
+
+    src = tmp_path / "motif.png"
+    make_saturated_blue_cyan_motif().save(src)
+    settings = _dtf_king_settings()
+
+    report = process_image_for_dtf_king_pdf(src, settings, tmp_path / "out")
+    assert report.success is True
+
+    original = np.array(Image.open(src).convert("RGBA"))
+    softproof = np.array(Image.open(tmp_path / "out" / "previews" / "motif_softproof.png").convert("RGBA"))
+
+    opaque_mask = original[:, :, 3] == 255
+    assert opaque_mask.any()
+    assert not np.array_equal(original[:, :, :3][opaque_mask], softproof[:, :, :3][opaque_mask])
+
+
 def test_missing_profile_fails_cleanly_without_writing_output(tmp_path: Path):
     src = tmp_path / "motif.png"
     make_saturated_blue_cyan_motif().save(src)

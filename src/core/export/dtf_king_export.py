@@ -36,9 +36,10 @@ from pathlib import Path
 from src.config.defaults import ProcessingSettings
 from src.core.analysis.alpha_analysis import analyze_alpha_channel
 from src.core.analysis.image_loader import ImageLoadError, load_image
-from src.core.color.cmyk_convert import CmykConversionError, convert_rgba_to_output_cmyk
+from src.core.color.cmyk_convert import CmykConversionError, convert_cmyk_to_preview_rgb, convert_rgba_to_output_cmyk
 from src.core.color.icc_manager import (
     ICCProfileError,
+    get_srgb_icc_bytes,
     get_srgb_profile,
     load_icc_profile,
     load_icc_profile_from_bytes,
@@ -46,6 +47,7 @@ from src.core.color.icc_manager import (
 from src.core.color.profile_validation import validate_cmyk_output_profile
 from src.core.export.filenames import avoid_collision
 from src.core.export.pdf_export import PdfExportError, export_cmyk_pdf, validate_cmyk_pdf
+from src.core.export.png_export import export_rgba_png
 from src.core.export.print_size import compute_print_size, resize_rgba_to_print_size
 from src.core.reporting.report_writer import write_html_report, write_json_report
 from src.models.report import ImageProcessingReport
@@ -233,6 +235,7 @@ def process_image_for_dtf_king_pdf(path: Path, settings: ProcessingSettings, out
 
     alpha_result = clean_alpha(array, classification.image_type, settings, report)
     array = alpha_result.rgba
+    transparency_only_rgba = array.copy()
 
     # --- 5: genau EINE echte ICC-Konvertierung nach CMYK, keine weitere Korrektur ---
     try:
@@ -257,10 +260,49 @@ def process_image_for_dtf_king_pdf(path: Path, settings: ProcessingSettings, out
         "Keine zusätzliche Sättigungs- oder Gamut-Korrektur angewendet.",
     )
 
-    # --- 6: einseitiger CMYK-PDF-Export ---
+    # --- Vorschauen: Zustand vor der Farbkonvertierung sowie eine
+    # Bildschirm-Rückwandlung der tatsächlich erzeugten CMYK-Daten (zeigt,
+    # wie die Farben nach der echten ICC-Konvertierung aussehen werden).
+    # Dieselben Dateinamen wie im normalen PNG-Ablauf, damit die Oberfläche
+    # sie ohne Sonderfall automatisch findet und anzeigt.
     from src.core.export.filenames import build_output_dirs
 
     dirs = build_output_dirs(output_root)
+
+    if export.write_transparency_only_preview:
+        transparency_only_path = avoid_collision(
+            dirs["previews"] / f"{path.stem}_transparency_only.png", export.overwrite_existing
+        )
+        export_rgba_png(transparency_only_rgba, transparency_only_path, icc_profile_bytes=get_srgb_icc_bytes())
+        report.add_step(
+            "export_transparency_only",
+            "Vorschau 'Transparenzoptimiert - Farben unverändert' erzeugt (Zustand nach Alpha-/"
+            "Halo-Korrektur, vor jeder Farbkonvertierung).",
+        )
+
+    if export.write_softproof_preview:
+        try:
+            softproof_rgba = convert_cmyk_to_preview_rgb(
+                cmyk_result.cmyk,
+                cmyk_result.alpha,
+                source_profile,
+                target_profile,
+                color.rendering_intent,
+                color.black_point_compensation,
+            )
+            softproof_path = avoid_collision(
+                dirs["previews"] / f"{path.stem}{export.filename_suffix_softproof}.png", export.overwrite_existing
+            )
+            export_rgba_png(softproof_rgba, softproof_path, icc_profile_bytes=get_srgb_icc_bytes())
+            report.add_step(
+                "export_softproof",
+                "DTF-King-Softproof-Vorschau erzeugt (Rückwandlung der tatsächlich in die PDF "
+                "geschriebenen CMYK-Farben zur Bildschirmanzeige).",
+            )
+        except CmykConversionError as exc:
+            report.warnings.append(f"DTF-King-Softproof-Vorschau konnte nicht erzeugt werden: {exc}")
+
+    # --- 6: einseitiger CMYK-PDF-Export ---
     pdf_path = avoid_collision(
         dirs["optimized"] / f"{path.stem}{export.filename_suffix_pdf}.pdf", export.overwrite_existing
     )

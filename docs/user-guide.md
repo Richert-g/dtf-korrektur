@@ -146,6 +146,12 @@ entsteht ausschließlich durch die eine, echte ICC-Transformation.
    geprüft (Seitenzahl, Farbraum, eingebettetes Profil, Transparenzmaske,
    Seitengröße). Nur bei erfolgreicher Prüfung gilt der Export als
    abgeschlossen.
+6. Die Vorschau springt danach automatisch auf **"DTF-King Softproof – ISO
+   Coated v2"**: eine Bildschirm-Rückwandlung der tatsächlich in die PDF
+   geschriebenen CMYK-Farben, zeigt also, wie die Farben nach der echten
+   ICC-Konvertierung aussehen. Über das Ansicht-Auswahlfeld ist außerdem
+   weiterhin "Transparenzoptimiert – Farben unverändert" verfügbar (Zustand
+   vor der Farbkonvertierung).
 
 Die Bildpixel werden **nie ohne Hinweis künstlich hochskaliert** - reichen sie
 für die gewünschte Größe bei 300 dpi nicht aus, erscheint eine Warnung wie

@@ -87,3 +87,39 @@ def convert_rgba_to_output_cmyk(
         rendering_intent=rendering_intent,
         black_point_compensation=black_point_compensation,
     )
+
+
+def convert_cmyk_to_preview_rgb(
+    cmyk: np.ndarray,
+    alpha: np.ndarray,
+    source_profile: ImageCms.ImageCmsProfile,
+    target_profile: ImageCms.ImageCmsProfile,
+    rendering_intent: RenderingIntent,
+    black_point_compensation: bool,
+) -> np.ndarray:
+    """Wandelt die tatsächlich erzeugten CMYK-Bilddaten zurück nach RGB, um
+    eine Bildschirm-Vorschau (Softproof) zu erzeugen: wie die Farben nach der
+    echten CMYK-Konvertierung aussehen werden. Der Alphakanal wird unverändert
+    wieder angefügt. Wirft CmykConversionError, wenn die Rücktransformation
+    fehlschlägt (z. B. inkompatibles Profil) - der Aufrufer entscheidet, ob er
+    das nur als Warnung behandelt.
+    """
+    if cmyk.ndim != 3 or cmyk.shape[2] != 4:
+        raise CmykConversionError("Erwarte ein CMYK-Array mit 4 Kanälen (H, W, 4).")
+
+    cms_intent = _INTENT_TO_CMS[rendering_intent]
+    flags = ImageCms.Flags.BLACKPOINTCOMPENSATION if black_point_compensation else ImageCms.Flags.NONE
+
+    try:
+        transform = ImageCms.buildTransform(
+            target_profile, source_profile, "CMYK", "RGB", renderingIntent=cms_intent, flags=flags
+        )
+        rgb_img = ImageCms.applyTransform(Image.fromarray(np.ascontiguousarray(cmyk), "CMYK"), transform)
+    except Exception as exc:
+        raise CmykConversionError(f"CMYK-Rückwandlung nach RGB (Softproof) fehlgeschlagen: {exc}") from exc
+
+    rgb = np.array(rgb_img, dtype=np.uint8)
+    if rgb.ndim != 3 or rgb.shape[2] != 3:
+        raise CmykConversionError("Die Rücktransformation lieferte kein 3-kanaliges RGB-Ergebnis.")
+
+    return np.dstack([rgb, np.ascontiguousarray(alpha)])

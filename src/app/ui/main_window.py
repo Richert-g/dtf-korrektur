@@ -621,7 +621,7 @@ class MainWindow(QMainWindow):
                 )
             else:
                 self.summary_text.append(f"\n{report.source_path.name}: Export fehlgeschlagen - {'; '.join(report.errors)}")
-            return
+                return
         current_row = self.file_list.currentRow()
         if 0 <= current_row < len(self.controller.selected_files):
             if self.controller.selected_files[current_row] == report.source_path and report.success:
@@ -655,9 +655,16 @@ class MainWindow(QMainWindow):
         white_mask_path = masks_dir / f"{stem}_white_mask.png"
         self._current_white_mask_rgba = self._try_load(white_mask_path)
 
-        modes = [VIEW_ORIGINAL, VIEW_RESULT, VIEW_ALPHA_MASK, VIEW_WHITE_TEXTILE, VIEW_BLACK_TEXTILE]
+        # VIEW_RESULT/ALPHA_MASK/WEISS/SCHWARZ hängen alle an _current_result_rgba
+        # (siehe _on_view_mode_changed) - ohne RGB-Ergebnis (z. B. beim
+        # DTF-King-PDF-Export, wo das Ergebnis keine RGB-Datei ist) blieben sie
+        # sonst als leere, funktionslose Einträge im Auswahlfeld stehen.
+        has_rgb_result = self._current_result_rgba is not None
+        modes = [VIEW_ORIGINAL]
+        if has_rgb_result:
+            modes += [VIEW_RESULT, VIEW_ALPHA_MASK, VIEW_WHITE_TEXTILE, VIEW_BLACK_TEXTILE]
         if self._current_softproof_rgba is not None:
-            modes.insert(2, VIEW_SOFTPROOF)
+            modes.insert(min(2, len(modes)), VIEW_SOFTPROOF)
         if self._current_removed_pixels_rgba is not None:
             modes.append(VIEW_REMOVED_PIXELS)
         if self._current_strengthened_pixels_rgba is not None:
@@ -674,7 +681,13 @@ class MainWindow(QMainWindow):
         if self._current_softproof_rgba is not None:
             modes.append(VIEW_DTF_KING_SOFTPROOF)
         self._set_view_modes(modes)
-        self.view_mode_combo.setCurrentText(VIEW_RESULT)
+
+        if has_rgb_result:
+            self.view_mode_combo.setCurrentText(VIEW_RESULT)
+        elif self._current_softproof_rgba is not None:
+            self.view_mode_combo.setCurrentText(VIEW_DTF_KING_SOFTPROOF)
+        else:
+            self.view_mode_combo.setCurrentText(VIEW_ORIGINAL_SOURCE)
 
     @staticmethod
     def _try_load(path: Path) -> np.ndarray | None:
