@@ -222,6 +222,28 @@ Export, der eine manuelle Bestätigung pro Bild erfordert).
 
 Ausführliche Erklärung aller Funktionen: [docs/user-guide.md](docs/user-guide.md)
 
+## Tests
+
+```
+pytest tests/ -v
+ruff check src tests
+mypy src
+```
+
+Neben den üblichen Unit-/Integrationstests gibt es unter
+`tests/visual_regression/` **visuelle Regressionstests**: sie lassen die
+echte Verarbeitungspipeline auf festen synthetischen Bildern laufen und
+vergleichen das Ergebnis pixelweise (mit kleiner Toleranz) gegen
+eingecheckte Referenzbilder unter `tests/fixtures/golden/`. Bei einer
+bewussten, geprüften Änderung an der Bildverarbeitung müssen diese
+Referenzbilder neu erzeugt werden:
+
+```
+python scripts/update_golden_images.py
+```
+
+Die veränderten Dateien danach von Auge prüfen, bevor sie committet werden.
+
 ## Dokumentation
 
 - [docs/architecture.md](docs/architecture.md) - Aufbau des Codes
