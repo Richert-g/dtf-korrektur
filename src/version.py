@@ -8,4 +8,4 @@ GitHub-Release-Tag.
 """
 from __future__ import annotations
 
-APP_VERSION = "1.0.13"
+APP_VERSION = "1.0.14"
