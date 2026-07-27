@@ -112,23 +112,59 @@ das primäre Zielsystem ist Windows.
 
 ## Funktionsumfang
 
-- **Automatische Analyse & Klassifizierung**: erkennt Logo/Schrift,
-  Illustration, Foto oder Motiv mit weichem Schatten und wählt passende
-  Verarbeitungsschritte.
-- **Alpha-Bereinigung**: vier Modi (Auto/Harte Kante/Sanfte Bereinigung/Nur
-  Störpixel), Otsu-Schwelle, Entfernung kleiner Pixelinseln, Schließen
-  kleiner Löcher.
+**Bildimport & Analyse**
+- PNG, JPG/JPEG, TIFF, BMP, WebP (PSD/AVIF als Best-Effort); Drag & Drop,
+  Einzelbild oder ganzer Ordner; Stapelverarbeitung mehrerer Dateien mit
+  Fortschrittsanzeige, Abbruch und kontrollierter Parallelität.
+- Automatische Bildtyp-Erkennung (Logo/Schrift, Illustration, Foto, Motiv mit
+  weichem Schatten/Glow) steuert die Automatik-Verarbeitung.
+
+**Transparenz-/Alpha-Bereinigung**
+- Vier Modi: Auto, Nur Störpixel entfernen, Sanfte Bereinigung, Harte Kante
+  (Otsu-Schwelle).
+- **Pixel löschen bis Alpha-Wert** und **Pixel ab Alpha-Wert auf volle
+  Deckkraft setzen** - beide mit einstellbarem Schwellenwert, inklusiver
+  Grenze und automatischem Schutz großer, bewusster weicher Flächen
+  (Schatten/Rauch/Glow) im Automatikmodus.
+- Entfernung kleiner Pixelinseln, Schließen kleiner transparenter Löcher,
+  Kantenrücknahme/-glättung.
 - **Farbsaum-/Halo-Korrektur** an halbtransparenten Kanten.
-- **ICC-Farbmanagement**: Quell-/Zielprofil, Softproof, Gamut-Analyse
-  (Delta E in Lab), automatische Rendering-Intent-Wahl, gezielte
-  Sättigungsoptimierung mit Schutz für Hauttöne/Grau/Schwarz.
-- **Diff-Vorschau**: entfernte/verstärkte Pixel farbig hervorgehoben.
-- **Presets** (DTF Auto, Logo, Illustration, Foto, weicher Schatten, …),
-  Stapelverarbeitung mit kontrollierter Parallelität und Abbruch.
-- **Export**: RGB-PNG mit Transparenz (Hauptausgabe), optional Alpha-Maske,
-  Weißunterlegungs-Vorschau, CMYK-TIFF-Vorschau, Softproof, JSON/HTML-Bericht.
-- Bringt bereits gängige RGB-/CMYK-ICC-Profile mit (FOGRA, GRACoL, SWOP,
-  Adobe RGB u. a.).
+
+**Farbmanagement (ICC, via LittleCMS)**
+- Automatische Quellprofil-Erkennung (sonst sRGB angenommen), frei wählbares
+  ICC-Zielprofil (mitgeliefert: FOGRA, GRACoL, SWOP, JapanColor, Adobe RGB
+  u. a.; eigene Profile importierbar und werden vor Verwendung geprüft).
+- Rendering Intent (automatisch oder manuell) und Schwarzpunktkompensation.
+- Gezielte, abschaltbare Sättigungsoptimierung für Farben außerhalb des
+  Zielfarbraums (schützt Hauttöne/Grau/Schwarz).
+- **Softproof**- und **Gamut-Warnung**-Vorschau (rein informativ).
+
+**Vorschau & Kontrolle**
+- Zoom (Mausrad, 10-800 %), Verschieben, Einpassen/100 % in jeder Ansicht.
+- Vorher/Nachher-Vergleich mit verschiebbarem Trenner, synchronem Zoom sowie
+  drei klar getrennten Zuständen (Original / nur Transparenz / Softproof).
+- **Farbpicker** im Vergleich: Klick auf ein Pixel zeigt Hex-Code, RGB und
+  Alpha vorher/nachher an derselben Stelle in voller Auflösung.
+- Diff-Vorschau: entfernte/verstärkte Pixel farbig hervorgehoben.
+
+**Presets**
+DTF Auto, Logo und Schrift, Illustration, Foto, weicher Schatten, Nur
+Transparenz, Nur Farben, **DTF-King - ISO Coated v2 (ECI)** (siehe unten),
+Benutzerdefiniert.
+
+**Ausgabeformat** - frei wählbar, unabhängig vom Preset:
+- **PNG** (Standard, mit Transparenz) / **TIFF** (verlustfrei, mit Transparenz)
+  / **JPEG** (ohne Transparenz, auf Volltonfarbe geflacht)
+- **PDF**: einseitige, druckfertige CMYK-PDF mit eingebettetem ICC-Profil,
+  echter Transparenz-Softmask, Mindestauflösungs-Prüfung (300 dpi) und
+  automatischer Nachvalidierung der erzeugten Datei - z. B. für den
+  DTF-King-Workflow.
+
+Zusätzlich optional exportierbar: Alpha-Maske, Weißunterlegungs-Vorschau,
+CMYK-TIFF-Vorschau, sowie ein technischer JSON- und ein verständlicher
+HTML-Bericht pro Bild (inkl. zusammenfassendem Stapelbericht).
+
+Ausführliche Erklärung aller Funktionen: [docs/user-guide.md](docs/user-guide.md)
 
 ## Dokumentation
 
