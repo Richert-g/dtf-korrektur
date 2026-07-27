@@ -80,6 +80,30 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host ""
 Write-Host "Fertig. Ausgabe unter: dist\DTF-Korrektur\DTF-Korrektur.exe" -ForegroundColor Green
 
+# --- Konsolen-Build für den Kommandozeilen-/Automatisierungsmodus -------
+# Eigener, separater Build (statt eines Schalters an der GUI-EXE): die GUI
+# wird mit --windowed gebaut und hat daher gar kein Konsolenfenster - stdout/
+# stderr/Exit-Codes kämen bei einem Taskplaner-Aufruf nirgends an. src/cli.py
+# hat bewusst keine PySide6-Abhängigkeit (siehe dortiger Moduldocstring),
+# wodurch dieser Build spürbar kleiner ausfällt und kein Qt mitbringt.
+Write-Host ""
+Write-Host "Baue DTF-Korrektur-CLI.exe (Kommandozeilenmodus) mit PyInstaller ..." -ForegroundColor Cyan
+
+& $Python -m PyInstaller `
+    --name "DTF-Korrektur-CLI" `
+    --console `
+    --onedir `
+    --noconfirm `
+    --paths . `
+    @AddData `
+    src/cli.py
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "CLI-Build fehlgeschlagen (GUI-Build ist trotzdem nutzbar)." -ForegroundColor Yellow
+} else {
+    Write-Host "Fertig. Ausgabe unter: dist\DTF-Korrektur-CLI\DTF-Korrektur-CLI.exe" -ForegroundColor Green
+}
+
 # --- Installer (Inno Setup) ---------------------------------------------
 $IsccCandidates = @(
     "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",

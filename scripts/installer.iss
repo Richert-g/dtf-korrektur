@@ -44,6 +44,15 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "..\dist\DTF-Korrektur\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Kommandozeilen-/Automatisierungsmodus (siehe README, Abschnitt
+; "Kommandozeilen-/Automatisierungsmodus") - bewusst in einem eigenen
+; Unterordner "cli" statt direkt in {app}, da es sich um einen komplett
+; separaten PyInstaller-Onedir-Build mit eigenem _internal-Ordner handelt
+; (kein Qt, siehe scripts\build_windows.ps1) - eine Vermischung der beiden
+; _internal-Ordner würde zu DLL-Konflikten führen. Optional: wird
+; übersprungen, falls der CLI-Build fehlgeschlagen ist (siehe dortiges
+; "skipifsourcedoesntexist").
+Source: "..\dist\DTF-Korrektur-CLI\*"; DestDir: "{app}\cli"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

@@ -7,22 +7,12 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
 from PySide6.QtWidgets import QLabel, QListWidget, QVBoxLayout, QWidget
 
-from src.config.defaults import SUPPORTED_IMPORT_FORMATS
+# collect_supported_files lebt in utils.file_collection (bewusst Qt-frei,
+# wird auch vom Kommandozeilenmodus cli.py genutzt) - hier nur re-exportiert,
+# damit bestehende Importe (main_window.py, Tests) unverändert bleiben.
+from src.utils.file_collection import collect_supported_files
 
-
-def collect_supported_files(paths: list[Path]) -> list[Path]:
-    """Sammelt aus einer Liste von Dateien/Ordnern alle unterstützten Bilddateien
-    (Ordner werden rekursiv durchsucht). Wird von DropArea, DropListWidget und
-    dem "Ordner auswählen"-Button gemeinsam genutzt."""
-    result: list[Path] = []
-    for p in paths:
-        if p.is_dir():
-            for child in sorted(p.rglob("*")):
-                if child.is_file() and child.suffix.lower() in SUPPORTED_IMPORT_FORMATS:
-                    result.append(child)
-        elif p.is_file() and p.suffix.lower() in SUPPORTED_IMPORT_FORMATS:
-            result.append(p)
-    return result
+__all__ = ["DropArea", "DropListWidget", "collect_supported_files"]
 
 
 def _urls_to_paths(event) -> list[Path]:

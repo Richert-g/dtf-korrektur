@@ -51,6 +51,19 @@ Alle Releases: [github.com/Richert-g/dtf-korrektur/releases](https://github.com/
 
 Ausführliche Anleitung: [docs/user-guide.md](docs/user-guide.md)
 
+### Kommandozeilen-/Automatisierungsmodus
+
+Für Batch-Verarbeitung ohne Oberfläche (z. B. über den Windows-Taskplaner)
+liegt nach der Installation zusätzlich `cli\DTF-Korrektur-CLI.exe` im
+Installationsordner vor (Standard: `C:\Program Files\DTF Korrektur\cli\`):
+
+```powershell
+"C:\Program Files\DTF Korrektur\cli\DTF-Korrektur-CLI.exe" --output "C:\Ausgabe" --preset "DTF Auto" "C:\Eingabe"
+```
+
+Volle Argumentliste, Exit-Codes und ein Taskplaner-Beispiel:
+[docs/cli.md](docs/cli.md)
+
 ## Unter Windows selbst kompilieren
 
 ```powershell
@@ -63,15 +76,20 @@ py -3.12 -m venv .venv
 # Lokal direkt starten (ohne EXE zu bauen):
 .venv\Scripts\python.exe -m src.app.main
 
+# Kommandozeilen-/Automatisierungsmodus lokal ausführen (ohne EXE zu bauen):
+.venv\Scripts\python.exe -m src.cli --output C:\Ausgabe --preset "DTF Auto" C:\Eingabe
+
 # EXE + Installer bauen (benötigt optional Inno Setup für den Installer,
 # z. B. per `winget install --id JRSoftware.InnoSetup`):
 scripts\build_windows.ps1
 ```
 
-Ergebnis: `dist\DTF-Korrektur\DTF-Korrektur.exe` (portabel) und
-`dist\installer\DTF-Korrektur-Setup.exe` (Installer). Details, inkl. warum
-`--onedir` statt `--onefile` verwendet wird und wie das App-Icon eingebunden
-ist: [docs/build-windows.md](docs/build-windows.md)
+Ergebnis: `dist\DTF-Korrektur\DTF-Korrektur.exe` (GUI, portabel),
+`dist\DTF-Korrektur-CLI\DTF-Korrektur-CLI.exe` (Kommandozeilenmodus, portabel)
+und `dist\installer\DTF-Korrektur-Setup.exe` (Installer, enthält beide).
+Details, inkl. warum `--onedir` statt `--onefile` verwendet wird und wie das
+App-Icon eingebunden ist: [docs/build-windows.md](docs/build-windows.md).
+Volle CLI-Referenz: [docs/cli.md](docs/cli.md)
 
 ## Unter Linux zum Laufen bringen
 
@@ -97,6 +115,16 @@ python -m src.app.main
 ```
 
 Tests laufen ebenso plattformunabhängig: `pytest tests/ -v`
+
+**Kommandozeilen-/Automatisierungsmodus** (kein Qt nötig, funktioniert auch
+ohne die Qt6-Laufzeitabhängigkeiten oben, da `src/cli.py` keine PySide6-
+Abhängigkeit hat):
+
+```bash
+python -m src.cli --output /pfad/ausgabe --preset "DTF Auto" /pfad/eingabe
+```
+
+Für automatisierte Läufe über `cron`, inkl. Beispiel: [docs/cli.md](docs/cli.md)
 
 Wer eine eigenständige Linux-Binary möchte, kann PyInstaller auch unter
 Linux verwenden (dort erzeugt es ein Linux-ELF-Binary, kein Windows-EXE):
@@ -139,6 +167,15 @@ Tests laufen ebenso plattformunabhängig: `pytest tests/ -v`
 
 Lokale Einstellungen/Profile landen mangels `%LOCALAPPDATA%` automatisch
 unter `~/.dtf_korrektur/` - keine gesonderte Konfiguration nötig.
+
+**Kommandozeilen-/Automatisierungsmodus**:
+
+```bash
+python -m src.cli --output /pfad/ausgabe --preset "DTF Auto" /pfad/eingabe
+```
+
+Für automatisierte Läufe über `launchd`, inkl. Beispiel-`.plist`:
+[docs/cli.md](docs/cli.md)
 
 Wer ein eigenständiges `.app`-Bundle möchte, kann PyInstaller auch unter
 macOS verwenden:
@@ -222,6 +259,13 @@ automatisch mit den aktuell gewählten Einstellungen - für Druckerei-
 Workflows mit laufend neuen Dateien (nicht verfügbar für den DTF-King-PDF-
 Export, der eine manuelle Bestätigung pro Bild erfordert).
 
+**Kommandozeilen-/Automatisierungsmodus**
+Batch-Verarbeitung ganz ohne Oberfläche über ein separates Konsolen-
+Werkzeug (`DTF-Korrektur-CLI.exe` unter Windows, `python -m src.cli` unter
+Linux/macOS) - für Windows-Taskplaner, Linux-`cron` oder macOS `launchd`.
+Nutzt dieselbe Pipeline und dieselben Presets (eingebaut wie
+benutzerdefiniert) wie die Oberfläche. Details: [docs/cli.md](docs/cli.md)
+
 Ausführliche Erklärung aller Funktionen: [docs/user-guide.md](docs/user-guide.md)
 
 ## Tests
@@ -253,6 +297,7 @@ Die veränderten Dateien danach von Auge prüfen, bevor sie committet werden.
 - [docs/color-management.md](docs/color-management.md) - ICC-Farbmanagement
 - [docs/build-windows.md](docs/build-windows.md) - EXE/Installer bauen
 - [docs/user-guide.md](docs/user-guide.md) - Bedienungsanleitung
+- [docs/cli.md](docs/cli.md) - Kommandozeilen-/Automatisierungsmodus (Argumente, Exit-Codes, Taskplaner/cron/launchd-Beispiele)
 
 ## Technologie
 

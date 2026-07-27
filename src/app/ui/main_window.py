@@ -865,11 +865,11 @@ class MainWindow(QMainWindow):
         self.btn_optimize.setEnabled(True)
         self.btn_cancel.setEnabled(False)
         self.btn_open_output.setEnabled(True)
-        self.summary_text.setPlainText(_format_batch_summary(summary))
+        from src.core.reporting.batch_report import format_batch_summary_text, write_batch_summary_report
+
+        self.summary_text.setPlainText(format_batch_summary_text(summary))
 
         if self.controller.output_dir is not None:
-            from src.core.reporting.batch_report import write_batch_summary_report
-
             try:
                 write_batch_summary_report(summary, self.controller.output_dir / "reports")
             except OSError:
@@ -971,24 +971,3 @@ def _format_analysis_summary(result) -> str:
     return "\n".join(lines)
 
 
-def _format_batch_summary(summary) -> str:
-    lines = [
-        f"Fertig: {summary.succeeded} von {summary.total_files} Dateien erfolgreich optimiert.",
-    ]
-    if summary.failed:
-        lines.append(f"{summary.failed} Datei(en) fehlgeschlagen.")
-    lines.append(f"Dauer: {summary.total_duration_seconds:.1f} s")
-    lines.append("")
-    for report in summary.reports:
-        status = "OK" if report.success else "FEHLER"
-        lines.append(f"[{status}] {Path(report.source_path).name if report.source_path else '?'}")
-        for w in report.warnings:
-            lines.append(f"   Hinweis: {w}")
-        for e in report.errors:
-            lines.append(f"   Fehler: {e}")
-    lines.append("")
-    lines.append(
-        "Hinweis: Diese Bildschirmvorschau ist keine Garantie für das endgültige Druckergebnis. "
-        "Das Ergebnis hängt zusätzlich von Drucker, Tinte, Folie/Pulver, RIP, Textil und Pressparametern ab."
-    )
-    return "\n".join(lines)

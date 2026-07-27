@@ -57,16 +57,28 @@ Das Skript:
    sperrt),
 3. baut mit PyInstaller im `--onedir`-Modus (zuverlässiger und schneller
    startend als `--onefile`), inkl. Icon und `resources/`-Ordner,
-4. erstellt zusätzlich einen echten Windows-Installer mit Inno Setup, **falls
+4. baut zusätzlich einen **zweiten, eigenständigen Konsolen-Build** für den
+   Kommandozeilen-/Automatisierungsmodus (`src/cli.py`, siehe README,
+   Abschnitt "Kommandozeilen-/Automatisierungsmodus") - bewusst ein
+   separater Build statt eines Schalters an der GUI-EXE, da diese mit
+   `--windowed` gebaut wird und daher kein Konsolenfenster hat (keine
+   stdout-Ausgabe, keine für einen Taskplaner auswertbaren Exit-Codes).
+   `src/cli.py` hat keine PySide6-Abhängigkeit, der Build bringt daher kein
+   Qt mit und fällt entsprechend kleiner aus,
+5. erstellt zusätzlich einen echten Windows-Installer mit Inno Setup, **falls
    `ISCC.exe` gefunden wird** - andernfalls wird dieser Schritt übersprungen
-   und eine Installationsanleitung ausgegeben.
+   und eine Installationsanleitung ausgegeben. Der Installer bündelt beide
+   Builds (GUI unter `{app}\`, CLI unter `{app}\cli\`, in getrennten
+   Unterordnern wegen der jeweils eigenen `_internal`-Abhängigkeiten).
 
 Ergebnis:
 
 ```
-dist\DTF-Korrektur\DTF-Korrektur.exe        <- eigenständige App (Ordner kopierbar)
+dist\DTF-Korrektur\DTF-Korrektur.exe            <- eigenständige GUI-App (Ordner kopierbar)
 dist\DTF-Korrektur\_internal\...
-dist\installer\DTF-Korrektur-Setup.exe      <- richtiger Installer (falls Inno Setup vorhanden)
+dist\DTF-Korrektur-CLI\DTF-Korrektur-CLI.exe    <- Kommandozeilen-/Automatisierungsmodus (Ordner kopierbar)
+dist\DTF-Korrektur-CLI\_internal\...
+dist\installer\DTF-Korrektur-Setup.exe          <- richtiger Installer (falls Inno Setup vorhanden), enthält beide
 ```
 
 `DTF-Korrektur-Setup.exe` installiert die App ins Startmenü (mit
