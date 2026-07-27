@@ -15,6 +15,14 @@ der Benutzer dagegen manuell einen konkreten Modus (z. B. "Nur Störpixel
 entfernen"), wird der Schwellenwert bewusst weiterhin auf das gesamte Bild
 angewendet - die Oberfläche zeigt dafür eine Warnung an (siehe
 AdvancedSettingsDialog).
+
+Symmetrisch dazu setzt "Pixel ab Alpha-Wert auf volle Deckkraft setzen"
+(`near_opaque_threshold`, ebenfalls inklusive Grenze: alpha >= threshold wird
+auf 255 gesetzt) alle ausreichend deckenden Pixel auf volle Deckkraft. Die
+zugrunde liegende Funktion `_strengthen_near_opaque` gilt für NOISE_ONLY und
+SOFT_CLEANUP gleichermaßen und wird im Automatikmodus durch dieselbe
+Schutzmaske eingeschränkt wie die Löschung - sonst könnte ein dichter Kern
+eines bewussten weichen Schattens/Glows fälschlich hart gemacht werden.
 """
 from __future__ import annotations
 
@@ -59,6 +67,19 @@ def _remove_weak_noise(
         weak_mask = weak_mask & ~protect_mask
     out[weak_mask] = 0
     return out, int(weak_mask.sum())
+
+
+def _strengthen_near_opaque(
+    alpha: np.ndarray, thresholds: AlphaThresholds, protect_mask: np.ndarray | None = None
+) -> tuple[np.ndarray, int]:
+    out = alpha.copy()
+    # Inklusive Grenze wie bei "Pixel löschen bis Alpha-Wert": alpha >= threshold
+    # wird auf volle Deckkraft gesetzt (NICHT alpha > threshold).
+    strengthen_mask = (alpha >= thresholds.near_opaque_threshold) & (alpha < 255)
+    if protect_mask is not None:
+        strengthen_mask = strengthen_mask & ~protect_mask
+    out[strengthen_mask] = 255
+    return out, int(strengthen_mask.sum())
 
 
 def _hard_edge_threshold(alpha_u8: np.ndarray, thresholds: AlphaThresholds) -> int:
@@ -146,10 +167,7 @@ def _apply_soft_cleanup(
     a = out[:, :, 3].copy()
 
     a, removed = _remove_weak_noise(a, thresholds, protect_mask)
-
-    near_opaque_mask = (original_alpha >= thresholds.near_opaque_threshold) & (original_alpha < 255)
-    a[near_opaque_mask] = 255
-    strengthened = int(near_opaque_mask.sum())
+    a, strengthened = _strengthen_near_opaque(a, thresholds, protect_mask)
 
     mid_band_mask = (original_alpha > thresholds.mid_low_threshold) & (original_alpha <= thresholds.mid_high_threshold)
     edge_band = motif_edge_band_mask(original_alpha, thresholds)
@@ -197,7 +215,10 @@ def clean_alpha(
     if mode == AlphaMode.NOISE_ONLY:
         out = rgba.copy()
         out[:, :, 3], removed = _remove_weak_noise(out[:, :, 3], thresholds, protect_mask)
-        result = AlphaCleanupResult(rgba=out, mode_used=mode, removed_pixel_count=removed)
+        out[:, :, 3], strengthened = _strengthen_near_opaque(out[:, :, 3], thresholds, protect_mask)
+        result = AlphaCleanupResult(
+            rgba=out, mode_used=mode, removed_pixel_count=removed, strengthened_pixel_count=strengthened
+        )
     elif mode == AlphaMode.SOFT_CLEANUP:
         out, removed, strengthened = _apply_soft_cleanup(rgba, thresholds, protect_mask)
         result = AlphaCleanupResult(

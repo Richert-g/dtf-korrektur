@@ -162,6 +162,20 @@ konkreter Modus gewählt (z. B. "Nur Störpixel entfernen"), gilt der
 Schwellenwert bewusst für das gesamte Bild - inklusive möglicher weicher
 Flächen.
 
+### "Pixel ab Alpha-Wert auf volle Deckkraft setzen"
+
+Das Gegenstück zu "Pixel löschen bis Alpha-Wert": Setzt alle Pixel mit einem
+Alpha-Wert ab einschließlich des eingestellten Werts auf volle Deckkraft
+(255). Ebenfalls mit Prozentangabe (z. B. "242 von 255 - Pixel ab etwa
+94,9 % Deckkraft werden voll deckend gemacht"). Standardwert: **242**.
+Wählbarer Bereich: 0-255.
+
+Gilt für die Alpha-Modi "Nur Störpixel entfernen" und "Sanfte Bereinigung".
+Im **Automatikmodus** greift dieselbe Schutzmaske wie beim Löschen: erkannte
+große, weiche Flächen (Schatten/Rauch/Glow) werden nicht pauschal hart
+gemacht. Im **manuell** gewählten Modus gilt der Schwellenwert wie beim
+Löschen für das gesamte Bild.
+
 ## Eigene ICC-Profile hinzufügen
 
 1. "Importieren…" neben der Profil-Auswahl klicken.

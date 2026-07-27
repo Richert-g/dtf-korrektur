@@ -16,19 +16,65 @@ def _arr(img):
 
 
 def test_noise_only_removes_only_weak_pixels():
-    """Mit dem neuen Standardwert (241) ist NOISE_ONLY weiterhin ein reiner
-    "Alpha <= Schwellenwert löschen"-Filter - hier mit Werten deutlich unter
-    bzw. über dem Standard-Schwellenwert getestet."""
+    """NOISE_ONLY ist ein reiner "Alpha <= Schwellenwert löschen"-Filter - die
+    Schwelle zum Volldeckend-Setzen wird hier bewusst auf 255 gesetzt (=
+    de facto deaktiviert), um die Löschung isoliert zu testen (siehe
+    test_noise_only_strengthens_near_opaque_pixels für das Zusammenspiel
+    beider Schwellen mit Standardwerten)."""
     arr = np.zeros((8, 8, 4), dtype=np.uint8)
-    arr[:, :, 3] = 250  # oberhalb des Standard-Schwellenwerts -> bleibt erhalten
-    arr[0, 0, 3] = 3  # unterhalb des Standard-Schwellenwerts -> wird gelöscht
+    arr[:, :, 3] = 250  # oberhalb des Löschen-Schwellenwerts -> bleibt erhalten
+    arr[0, 0, 3] = 3  # unterhalb des Löschen-Schwellenwerts -> wird gelöscht
     settings = ProcessingSettings()
     settings.alpha_mode = AlphaMode.NOISE_ONLY
+    settings.alpha.near_opaque_threshold = 255
     assert settings.alpha.weak_alpha_threshold == 241
     result = clean_alpha(arr, ImageType.PHOTO, settings, report=None)
     assert result.rgba[0, 0, 3] == 0
     assert result.rgba[1, 1, 3] == 250  # unverändert
     assert result.removed_pixel_count == 1
+
+
+def test_noise_only_strengthens_near_opaque_pixels():
+    """Pixel ab Alpha-Wert 'near_opaque_threshold' werden auch im NOISE_ONLY-
+    Modus auf volle Deckkraft (255) gesetzt - inklusive Grenze (>=, nicht >).
+    Der Löschen-Schwellenwert wird hier bewusst niedrig gesetzt, damit der
+    mittlere Testwert (100) nicht schon vorher durch die (mit Standardwert
+    241 sehr aggressive) Löschung entfernt wird - siehe
+    test_noise_only_removes_only_weak_pixels für den umgekehrten Fall."""
+    arr = np.zeros((8, 8, 4), dtype=np.uint8)
+    arr[:, :, 3] = 100  # deutlich unterhalb -> bleibt unverändert
+    arr[0, 0, 3] = 242  # == Standard-Schwellenwert -> wird volldeckend (inklusive Grenze)
+    arr[0, 1, 3] = 250  # oberhalb -> wird volldeckend
+    settings = ProcessingSettings()
+    settings.alpha_mode = AlphaMode.NOISE_ONLY
+    settings.alpha.weak_alpha_threshold = 13
+    assert settings.alpha.near_opaque_threshold == 242
+    result = clean_alpha(arr, ImageType.PHOTO, settings, report=None)
+    assert result.rgba[0, 0, 3] == 255
+    assert result.rgba[0, 1, 3] == 255
+    assert result.rgba[1, 1, 3] == 100  # unverändert
+    assert result.strengthened_pixel_count == 2
+
+
+def test_strengthen_near_opaque_respects_auto_mode_shadow_protection():
+    """Im Automatikmodus darf eine erkannte große weiche Fläche (Schatten/Glow)
+    nicht durch das Vollmachen auf 255 hart gemacht werden - dieselbe
+    Schutzmaske wie beim Löschen muss auch hier greifen."""
+    img = make_large_soft_shadow()
+    arr = np.array(img)
+    settings = ProcessingSettings()
+    settings.alpha_mode = AlphaMode.AUTO
+    settings.alpha.near_opaque_threshold = 100  # aggressiv, um den Schatten sicher zu treffen
+
+    shadow_alpha_before = arr[:, :, 3].copy()
+    candidate_mask = (shadow_alpha_before >= 100) & (shadow_alpha_before < 255)
+    assert candidate_mask.any(), "Testbild sollte Schattenpixel im betroffenen Bereich haben"
+
+    result = clean_alpha(arr, ImageType.SOFT_SHADOW, settings, report=None)
+
+    # Die eigentlichen Motiv-Pixel (schon 255) bleiben unberührt, aber die
+    # weiche Schattenfläche darf NICHT pauschal auf 255 hochgesetzt worden sein.
+    assert not (result.rgba[:, :, 3][candidate_mask] == 255).all()
 
 
 def test_weak_alpha_threshold_boundary_is_inclusive():

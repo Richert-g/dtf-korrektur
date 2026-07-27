@@ -95,10 +95,34 @@ class AdvancedSettingsDialog(QDialog):
 
         form.addRow("Pixel löschen bis Alpha-Wert", weak_container)
 
+        strengthen_container = QWidget()
+        strengthen_layout = QVBoxLayout(strengthen_container)
+        strengthen_layout.setContentsMargins(0, 0, 0, 0)
+        strengthen_layout.setSpacing(2)
+
         self.near_opaque_threshold = self._spin(
-            0, 255, a.near_opaque_threshold, "Ab diesem Wert gilt ein Pixel als volle Deckkraft."
+            0,
+            255,
+            a.near_opaque_threshold,
+            "Alle Pixel mit Alpha ab einschließlich diesem Wert werden auf volle Deckkraft (255) gesetzt.",
         )
-        form.addRow("Schwelle volle Deckkraft", self.near_opaque_threshold)
+        strengthen_layout.addWidget(self.near_opaque_threshold)
+
+        strengthen_help = QLabel(
+            "Alle Pixel mit einem Alpha-Wert ab einschließlich des eingestellten Werts werden auf volle "
+            "Deckkraft gesetzt.\n0 = vollständig transparent, 255 = vollständig deckend"
+        )
+        strengthen_help.setWordWrap(True)
+        strengthen_layout.addWidget(strengthen_help)
+
+        self.near_opaque_percent_label = QLabel()
+        self.near_opaque_percent_label.setWordWrap(True)
+        strengthen_layout.addWidget(self.near_opaque_percent_label)
+
+        self.near_opaque_threshold.valueChanged.connect(self._update_near_opaque_info)
+        self._update_near_opaque_info(self.near_opaque_threshold.value())
+
+        form.addRow("Pixel ab Alpha-Wert auf volle Deckkraft setzen", strengthen_container)
 
         self.min_island = self._spin(0, 500, a.min_island_size_px, "Pixelinseln kleiner als dieser Wert werden entfernt.")
         form.addRow("Min. Inselgröße (px)", self.min_island)
@@ -126,6 +150,12 @@ class AdvancedSettingsDialog(QDialog):
             self.weak_threshold_warning_label.show()
         else:
             self.weak_threshold_warning_label.hide()
+
+    def _update_near_opaque_info(self, value: int) -> None:
+        percent = value / 255 * 100
+        self.near_opaque_percent_label.setText(
+            f"{value} von 255 – Pixel ab etwa {percent:.1f} % Deckkraft werden voll deckend gemacht"
+        )
 
     def _build_halo_tab(self) -> QWidget:
         w = QWidget()
