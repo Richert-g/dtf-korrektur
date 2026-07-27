@@ -23,6 +23,15 @@ class AlphaMode(str, Enum):
     NOISE_ONLY = "noise_only"
 
 
+class AlphaThresholdOrder(str, Enum):
+    """Reihenfolge, in der "Pixel löschen" und "Pixel volldeckend setzen"
+    angewendet werden. Nur relevant, wenn sich die beiden Schwellenwerte
+    überschneiden (sonst identisches Ergebnis in beiden Reihenfolgen)."""
+
+    REMOVE_FIRST = "remove_first"
+    STRENGTHEN_FIRST = "strengthen_first"
+
+
 class RenderingIntent(str, Enum):
     PERCEPTUAL = "perceptual"
     RELATIVE_COLORIMETRIC = "relative_colorimetric"

@@ -18,7 +18,12 @@ from PySide6.QtWidgets import (
 )
 
 from src.config.defaults import AlphaThresholds, ProcessingSettings
-from src.models.enums import AlphaMode, RenderingIntent
+from src.models.enums import AlphaMode, AlphaThresholdOrder, RenderingIntent
+
+ALPHA_THRESHOLD_ORDER_LABELS = {
+    AlphaThresholdOrder.REMOVE_FIRST: "Zuerst löschen, dann volldeckend setzen",
+    AlphaThresholdOrder.STRENGTHEN_FIRST: "Zuerst volldeckend setzen, dann löschen",
+}
 
 
 class AdvancedSettingsDialog(QDialog):
@@ -159,6 +164,17 @@ class AdvancedSettingsDialog(QDialog):
         self.near_opaque_threshold.setEnabled(a.near_opaque_threshold_enabled)
 
         form.addRow(strengthen_container)
+
+        self.threshold_order_combo = QComboBox()
+        for order in AlphaThresholdOrder:
+            self.threshold_order_combo.addItem(ALPHA_THRESHOLD_ORDER_LABELS[order], order)
+        self.threshold_order_combo.setCurrentIndex(list(AlphaThresholdOrder).index(a.threshold_order))
+        self.threshold_order_combo.setToolTip(
+            "Legt fest, welche der beiden obigen Funktionen zuerst läuft. Wirkt sich nur aus, wenn "
+            "sich die beiden Schwellenwerte überschneiden (unüblich) - sonst liefern beide "
+            "Reihenfolgen dasselbe Ergebnis."
+        )
+        form.addRow("Reihenfolge bei Überschneidung", self.threshold_order_combo)
 
         self.min_island = self._spin(0, 500, a.min_island_size_px, "Pixelinseln kleiner als dieser Wert werden entfernt.")
         form.addRow("Min. Inselgröße (px)", self.min_island)
@@ -307,6 +323,7 @@ class AdvancedSettingsDialog(QDialog):
         a.weak_alpha_threshold_enabled = self.weak_enabled_checkbox.isChecked()
         a.near_opaque_threshold = self.near_opaque_threshold.value()
         a.near_opaque_threshold_enabled = self.near_opaque_enabled_checkbox.isChecked()
+        a.threshold_order = AlphaThresholdOrder(self.threshold_order_combo.currentData())
         a.min_island_size_px = self.min_island.value()
         a.max_hole_fill_size_px = self.max_hole.value()
         a.edge_choke_px = self.edge_choke.value()

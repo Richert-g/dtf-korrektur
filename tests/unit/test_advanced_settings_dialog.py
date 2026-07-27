@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QApplication
 
 from src.app.ui.advanced_settings_dialog import AdvancedSettingsDialog
 from src.config.defaults import ProcessingSettings
+from src.models.enums import AlphaThresholdOrder
 
 
 @pytest.fixture(scope="module")
@@ -148,3 +149,42 @@ def test_dialog_reflects_previously_disabled_state_on_reopen(qapp):
     assert dlg.near_opaque_enabled_checkbox.isChecked() is False
     assert dlg.near_opaque_threshold.value() == 210
     assert dlg.near_opaque_threshold.isEnabled() is False
+
+
+# --- Konfigurierbare Reihenfolge bei sich überschneidenden Schwellenwerten ---
+
+
+def test_threshold_order_combo_defaults_to_remove_first(qapp):
+    settings = ProcessingSettings()
+    dlg = AdvancedSettingsDialog(settings)
+    assert dlg.threshold_order_combo.currentData() == AlphaThresholdOrder.REMOVE_FIRST
+
+
+def test_threshold_order_combo_reflects_saved_strengthen_first(qapp):
+    settings = ProcessingSettings()
+    settings.alpha.threshold_order = AlphaThresholdOrder.STRENGTHEN_FIRST
+    dlg = AdvancedSettingsDialog(settings)
+    assert dlg.threshold_order_combo.currentData() == AlphaThresholdOrder.STRENGTHEN_FIRST
+
+
+def test_apply_to_settings_persists_threshold_order(qapp):
+    settings = ProcessingSettings()
+    dlg = AdvancedSettingsDialog(settings)
+
+    dlg.threshold_order_combo.setCurrentIndex(list(AlphaThresholdOrder).index(AlphaThresholdOrder.STRENGTHEN_FIRST))
+    dlg.apply_to_settings()
+
+    assert settings.alpha.threshold_order == AlphaThresholdOrder.STRENGTHEN_FIRST
+
+
+def test_apply_to_settings_survives_str_only_combo_data(qapp):
+    """Regression: PySide6 kann bei str-Enums über currentData() ein reines
+    str-Objekt statt des Enum-Members liefern (siehe apply_to_settings-
+    Kommentar bei AlphaMode) - apply_to_settings muss auch damit zurechtkommen."""
+    settings = ProcessingSettings()
+    dlg = AdvancedSettingsDialog(settings)
+    dlg.threshold_order_combo.setItemData(0, str(AlphaThresholdOrder.REMOVE_FIRST.value))
+
+    dlg.apply_to_settings()
+
+    assert settings.alpha.threshold_order == AlphaThresholdOrder.REMOVE_FIRST

@@ -2,7 +2,7 @@ import numpy as np
 
 from src.config.defaults import ProcessingSettings
 from src.core.alpha.alpha_cleanup import clean_alpha
-from src.models.enums import AlphaMode, ImageType
+from src.models.enums import AlphaMode, AlphaThresholdOrder, ImageType
 from tests.fixtures.synthetic_images import (
     make_large_soft_shadow,
     make_logo_with_white_halo,
@@ -262,6 +262,85 @@ def test_thresholds_independently_toggleable_in_soft_cleanup_mode():
     result = clean_alpha(arr, ImageType.ILLUSTRATION, settings, report=None)
 
     assert (result.rgba[:, :, 3] == 250).all()
+
+
+# --- Konfigurierbare Reihenfolge bei sich überschneidenden Schwellenwerten ---
+
+
+def test_threshold_order_defaults_to_remove_first():
+    settings = ProcessingSettings()
+    assert settings.alpha.threshold_order == AlphaThresholdOrder.REMOVE_FIRST
+
+
+def test_remove_first_order_deletes_overlapping_pixel():
+    """Bei sich überschneidenden Schwellenwerten (weak >= near_opaque) gewinnt
+    im Standardmodus REMOVE_FIRST die Löschung: das Pixel wird zuerst auf 0
+    gesetzt, danach greift die Volldeckend-Prüfung nicht mehr (0 < near_opaque)."""
+    arr = np.zeros((4, 4, 4), dtype=np.uint8)
+    arr[:, :, 3] = 180  # erfüllt beide Bedingungen im überlappenden Bereich
+    settings = ProcessingSettings()
+    settings.alpha_mode = AlphaMode.NOISE_ONLY
+    settings.alpha.weak_alpha_threshold = 200
+    settings.alpha.near_opaque_threshold = 150
+    settings.alpha.threshold_order = AlphaThresholdOrder.REMOVE_FIRST
+
+    result = clean_alpha(arr, ImageType.PHOTO, settings, report=None)
+
+    assert (result.rgba[:, :, 3] == 0).all()
+    assert result.removed_pixel_count == 16
+    assert result.strengthened_pixel_count == 0
+
+
+def test_strengthen_first_order_keeps_overlapping_pixel_opaque():
+    """Mit STRENGTHEN_FIRST wird dasselbe Pixel zuerst auf volle Deckkraft (255)
+    gesetzt - danach ist es kein Kandidat mehr für die Löschung
+    (255 > weak_alpha_threshold), bleibt also erhalten statt gelöscht zu werden."""
+    arr = np.zeros((4, 4, 4), dtype=np.uint8)
+    arr[:, :, 3] = 180
+    settings = ProcessingSettings()
+    settings.alpha_mode = AlphaMode.NOISE_ONLY
+    settings.alpha.weak_alpha_threshold = 200
+    settings.alpha.near_opaque_threshold = 150
+    settings.alpha.threshold_order = AlphaThresholdOrder.STRENGTHEN_FIRST
+
+    result = clean_alpha(arr, ImageType.PHOTO, settings, report=None)
+
+    assert (result.rgba[:, :, 3] == 255).all()
+    assert result.strengthened_pixel_count == 16
+    assert result.removed_pixel_count == 0
+
+
+def test_threshold_order_has_no_effect_without_overlapping_thresholds():
+    """Bei nicht überschneidenden Schwellenwerten (Standardkonfiguration) liefern
+    beide Reihenfolgen dasselbe Ergebnis."""
+    arr = np.zeros((8, 8, 4), dtype=np.uint8)
+    arr[:, :, 3] = 100
+    arr[0, 0, 3] = 3
+    arr[0, 1, 3] = 250
+
+    results = {}
+    for order in AlphaThresholdOrder:
+        settings = ProcessingSettings()
+        settings.alpha_mode = AlphaMode.NOISE_ONLY
+        settings.alpha.threshold_order = order
+        results[order] = clean_alpha(arr, ImageType.PHOTO, settings, report=None).rgba[:, :, 3]
+
+    assert np.array_equal(results[AlphaThresholdOrder.REMOVE_FIRST], results[AlphaThresholdOrder.STRENGTHEN_FIRST])
+
+
+def test_threshold_order_also_applies_in_soft_cleanup_mode():
+    """_apply_soft_cleanup nutzt denselben gemeinsamen Reihenfolge-Mechanismus."""
+    arr = np.zeros((4, 4, 4), dtype=np.uint8)
+    arr[:, :, 3] = 180
+    settings = ProcessingSettings()
+    settings.alpha_mode = AlphaMode.SOFT_CLEANUP
+    settings.alpha.weak_alpha_threshold = 200
+    settings.alpha.near_opaque_threshold = 150
+    settings.alpha.threshold_order = AlphaThresholdOrder.STRENGTHEN_FIRST
+
+    result = clean_alpha(arr, ImageType.ILLUSTRATION, settings, report=None)
+
+    assert (result.rgba[:, :, 3] == 255).all()
 
 
 def test_disabling_one_threshold_does_not_affect_the_other():

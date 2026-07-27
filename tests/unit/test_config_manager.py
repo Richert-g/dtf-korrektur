@@ -2,7 +2,7 @@ import json
 
 from src.config.config_manager import settings_from_dict, settings_to_dict
 from src.config.defaults import ProcessingSettings
-from src.models.enums import AlphaMode, RenderingIntent
+from src.models.enums import AlphaMode, AlphaThresholdOrder, RenderingIntent
 
 
 def test_roundtrip_default_settings():
@@ -29,6 +29,17 @@ def test_roundtrip_modified_settings():
     assert restored.alpha_mode == AlphaMode.HARD_EDGE
     assert restored.alpha.min_island_size_px == 42
     assert restored.color.rendering_intent == RenderingIntent.PERCEPTUAL
+
+
+def test_roundtrip_threshold_order():
+    settings = ProcessingSettings()
+    settings.alpha.threshold_order = AlphaThresholdOrder.STRENGTHEN_FIRST
+
+    data = settings_to_dict(settings)
+    json_str = json.dumps(data)
+    restored = settings_from_dict(json.loads(json_str))
+
+    assert restored.alpha.threshold_order == AlphaThresholdOrder.STRENGTHEN_FIRST
 
 
 def test_settings_to_dict_is_json_serializable():

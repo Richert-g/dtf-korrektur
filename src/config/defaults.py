@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from src.models.enums import AlphaMode, OutputFormat, RenderingIntent
+from src.models.enums import AlphaMode, AlphaThresholdOrder, OutputFormat, RenderingIntent
 
 
 @dataclass
@@ -35,6 +35,11 @@ class AlphaThresholds:
     # Schaltet "Pixel ab Alpha-Wert auf volle Deckkraft setzen" unabhängig vom
     # gespeicherten Schwellenwert ein/aus - der Wert bleibt beim Deaktivieren erhalten.
     near_opaque_threshold_enabled: bool = True
+    # Reihenfolge, in der die beiden obigen Funktionen angewendet werden.
+    # Nur relevant, wenn sich die Schwellenwerte überschneiden (unüblich) -
+    # REMOVE_FIRST entspricht dem bisherigen, unveränderten Standardverhalten
+    # (Löschen gewinnt bei einem sich überschneidenden Pixel).
+    threshold_order: AlphaThresholdOrder = AlphaThresholdOrder.REMOVE_FIRST
     # Harte Kante: automatisch ermittelter Schwellenwert (Fallback-Default)
     hard_edge_default_threshold: int = 128
     # Kleine Pixelinseln (Fläche in Pixel) unterhalb dieser Größe werden entfernt

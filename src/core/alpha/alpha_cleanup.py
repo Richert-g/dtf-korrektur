@@ -31,8 +31,13 @@ unverändert erhalten, nur der Verarbeitungsschritt selbst wird übersprungen
 (`_remove_weak_noise`/`_strengthen_near_opaque` geben das Array dann
 unverändert zurück). Sind beide Pixel-Bedingungen für ein Pixel gleichzeitig
 erfüllt (nur bei ungewöhnlicher Konfiguration mit sich überschneidenden
-Schwellenwerten möglich), gewinnt die Löschung, da `_remove_weak_noise` immer
-zuerst läuft - entspricht einem klassischen if/elif mit Vorrang fürs Löschen.
+Schwellenwerten möglich), entscheidet `threshold_order`
+(`AlphaThresholdOrder`), welche Funktion zuerst läuft und damit "gewinnt":
+REMOVE_FIRST (Standard, bisheriges Verhalten) lässt die Löschung zuerst
+laufen, STRENGTHEN_FIRST kehrt die Reihenfolge um. Bei nicht überschneidenden
+Schwellenwerten liefert jede Reihenfolge dasselbe Ergebnis. Die gemeinsame
+Anwendung beider Funktionen in der konfigurierten Reihenfolge kapselt
+`_apply_alpha_thresholds`.
 """
 from __future__ import annotations
 
@@ -43,7 +48,7 @@ import numpy as np
 
 from src.config.defaults import AlphaThresholds, ProcessingSettings
 from src.core.analysis.alpha_analysis import compute_large_soft_region_mask, motif_edge_band_mask
-from src.models.enums import AlphaMode, ImageType
+from src.models.enums import AlphaMode, AlphaThresholdOrder, ImageType
 from src.models.report import ImageProcessingReport
 
 
@@ -94,6 +99,20 @@ def _strengthen_near_opaque(
         strengthen_mask = strengthen_mask & ~protect_mask
     out[strengthen_mask] = 255
     return out, int(strengthen_mask.sum())
+
+
+def _apply_alpha_thresholds(
+    alpha: np.ndarray, thresholds: AlphaThresholds, protect_mask: np.ndarray | None = None
+) -> tuple[np.ndarray, int, int]:
+    """Wendet Löschen und Volldeckend-Setzen in der konfigurierten Reihenfolge an
+    (siehe Moduldokumentation zu `threshold_order`)."""
+    if thresholds.threshold_order == AlphaThresholdOrder.STRENGTHEN_FIRST:
+        alpha, strengthened = _strengthen_near_opaque(alpha, thresholds, protect_mask)
+        alpha, removed = _remove_weak_noise(alpha, thresholds, protect_mask)
+    else:
+        alpha, removed = _remove_weak_noise(alpha, thresholds, protect_mask)
+        alpha, strengthened = _strengthen_near_opaque(alpha, thresholds, protect_mask)
+    return alpha, removed, strengthened
 
 
 def _hard_edge_threshold(alpha_u8: np.ndarray, thresholds: AlphaThresholds) -> int:
@@ -180,8 +199,7 @@ def _apply_soft_cleanup(
     original_alpha = rgba[:, :, 3]
     a = out[:, :, 3].copy()
 
-    a, removed = _remove_weak_noise(a, thresholds, protect_mask)
-    a, strengthened = _strengthen_near_opaque(a, thresholds, protect_mask)
+    a, removed, strengthened = _apply_alpha_thresholds(a, thresholds, protect_mask)
 
     mid_band_mask = (original_alpha > thresholds.mid_low_threshold) & (original_alpha <= thresholds.mid_high_threshold)
     edge_band = motif_edge_band_mask(original_alpha, thresholds)
@@ -228,8 +246,7 @@ def clean_alpha(
 
     if mode == AlphaMode.NOISE_ONLY:
         out = rgba.copy()
-        out[:, :, 3], removed = _remove_weak_noise(out[:, :, 3], thresholds, protect_mask)
-        out[:, :, 3], strengthened = _strengthen_near_opaque(out[:, :, 3], thresholds, protect_mask)
+        out[:, :, 3], removed, strengthened = _apply_alpha_thresholds(out[:, :, 3], thresholds, protect_mask)
         result = AlphaCleanupResult(
             rgba=out, mode_used=mode, removed_pixel_count=removed, strengthened_pixel_count=strengthened
         )

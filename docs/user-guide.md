@@ -255,6 +255,19 @@ Schutzmaske: erkannte große, weiche Flächen (Schatten/Rauch/Glow) werden
 weder gelöscht noch pauschal hart gemacht. Im **manuell** gewählten Modus
 gilt der jeweils aktivierte Schwellenwert für das gesamte Bild.
 
+**Reihenfolge bei Überschneidung**: Über das Auswahlfeld "Reihenfolge bei
+Überschneidung" wird festgelegt, welche der beiden Funktionen zuerst läuft.
+Das wirkt sich nur aus, wenn die beiden Schwellenwerte sich überschneiden
+(z. B. "Pixel löschen bis Alpha-Wert" = 200 und "... volldeckend setzen" =
+150 - ein Pixel mit Alpha 180 erfüllt dann beide Bedingungen gleichzeitig).
+Bei den Standardwerten (241/242) kommt das nicht vor. Zwei Optionen:
+
+- **Zuerst löschen, dann volldeckend setzen** (Standard, bisheriges
+  Verhalten): Das betroffene Pixel wird gelöscht (Alpha 0).
+- **Zuerst volldeckend setzen, dann löschen**: Das betroffene Pixel wird
+  zuerst auf volle Deckkraft (255) gesetzt und ist danach kein Kandidat mehr
+  für die Löschung - es bleibt erhalten.
+
 ## Eigene ICC-Profile hinzufügen
 
 1. "Importieren…" neben der Profil-Auswahl klicken.
