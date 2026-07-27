@@ -24,7 +24,7 @@ def test_stale_dtf_king_output_format_is_reset_on_startup(monkeypatch, tmp_path)
 
     assert controller.settings.export.output_format == OutputFormat.PNG_RGB
     assert controller.settings.gamut.enable_auto_gamut_correction is True
-    assert controller.settings.gamut.max_auto_saturation_reduction == 0.35
+    assert controller.settings.gamut.max_auto_saturation_reduction == 0.15
 
 
 def test_normal_settings_are_not_altered_on_startup(monkeypatch, tmp_path):

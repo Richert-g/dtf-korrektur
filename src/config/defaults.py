@@ -85,7 +85,7 @@ class GamutThresholds:
     # Ab diesem Out-of-Gamut-Flächenanteil wird perzeptiv statt farbmetrisch bevorzugt
     perceptual_preference_threshold_pct: float = 8.0
     # Maximale automatische Sättigungsreduktion (0-1, 0.3 = max. 30 %)
-    max_auto_saturation_reduction: float = 0.35
+    max_auto_saturation_reduction: float = 0.15
     # Iterationsgrenze für die iterative Farboptimierung
     max_optimization_iterations: int = 4
     # Abbruch, wenn die Verbesserung zwischen zwei Iterationen kleiner ist
