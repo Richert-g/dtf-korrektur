@@ -84,8 +84,11 @@ Write-Host "Fertig. Ausgabe unter: dist\DTF-Korrektur\DTF-Korrektur.exe" -Foregr
 # Eigener, separater Build (statt eines Schalters an der GUI-EXE): die GUI
 # wird mit --windowed gebaut und hat daher gar kein Konsolenfenster - stdout/
 # stderr/Exit-Codes kämen bei einem Taskplaner-Aufruf nirgends an. src/cli.py
-# hat bewusst keine PySide6-Abhängigkeit (siehe dortiger Moduldocstring),
-# wodurch dieser Build spürbar kleiner ausfällt und kein Qt mitbringt.
+# hat bewusst keine PySide6-Abhängigkeit (siehe dortiger Moduldocstring).
+# --exclude-module PySide6/shiboken6 ist trotzdem nötig: PyInstallers
+# Analyse bindet PySide6 sonst ein, obwohl kein importierter Code-Pfad es
+# tatsächlich braucht (geprüft: Build läuft ohne Warnungen zu fehlenden
+# Modulen durch, ~30 % kleinerer dist-Ordner als ohne die Ausschlüsse).
 Write-Host ""
 Write-Host "Baue DTF-Korrektur-CLI.exe (Kommandozeilenmodus) mit PyInstaller ..." -ForegroundColor Cyan
 
@@ -95,6 +98,8 @@ Write-Host "Baue DTF-Korrektur-CLI.exe (Kommandozeilenmodus) mit PyInstaller ...
     --onedir `
     --noconfirm `
     --paths . `
+    --exclude-module PySide6 `
+    --exclude-module shiboken6 `
     @AddData `
     src/cli.py
 

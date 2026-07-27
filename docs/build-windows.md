@@ -120,6 +120,12 @@ Für eine einzelne EXE-Datei statt eines Ordners (etwas langsamerer Start):
 - Eigene ICC-Profile werden automatisch erkannt, wenn sie vor dem Build in
   `resources/profiles/` (auch in Unterordnern wie `CMYK/`, `RGB/`) abgelegt
   werden.
+- Der CLI-Build (`src/cli.py`, keine PySide6-Abhängigkeit im Code) bindet
+  PyInstallers automatischer Analyse zufolge trotzdem PySide6/shiboken6 mit
+  ein, obwohl kein tatsächlich importierter Code-Pfad das braucht - deshalb
+  im Skript explizit `--exclude-module PySide6 --exclude-module shiboken6`
+  (geprüft: Build läuft ohne Warnungen zu fehlenden Modulen durch, spart
+  ca. 30 % Speicherplatz im `dist`-Ordner).
 - `$ErrorActionPreference` in den PowerShell-Skripten ist bewusst `Continue`
   statt `Stop`: Native Tools wie PyInstaller/ISCC schreiben auch reine
   INFO-Meldungen nach stderr, was PowerShell 5.1 bei `Stop` fälschlich als
