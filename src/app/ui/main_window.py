@@ -38,7 +38,7 @@ from src.app.ui.zoom_pan_view import ZoomToolbar
 from src.app.ui.zoomable_view import ZoomableImageView
 from src.app.workers.analysis_worker import run_analysis_in_thread
 from src.app.workers.pipeline_worker import run_batch_in_thread
-from src.app.workers.update_check_worker import run_update_check_in_thread
+from src.app.workers.update_check_async import AsyncUpdateChecker
 from src.config.defaults import MAX_PREVIEW_DIMENSION_PX
 from src.core.analysis.image_loader import load_image
 from src.core.export.dtf_king_export import process_image_for_dtf_king_pdf_safe
@@ -150,9 +150,9 @@ class MainWindow(QMainWindow):
         self._current_white_mask_rgba: np.ndarray | None = None
         self._current_transparency_only_rgba: np.ndarray | None = None
         self._last_reports: dict[str, object] = {}
-        self._update_check_thread = None
-        self._update_check_worker = None
+        self._update_checker = None
         self._latest_release_url: str | None = None
+        self._hot_folder_dialog = None
 
         self._build_ui()
         self._connect_signals()
@@ -356,8 +356,10 @@ class MainWindow(QMainWindow):
         self.btn_advanced = QPushButton("Erweiterte Einstellungen")
         self.btn_open_output = QPushButton("Ergebnisordner öffnen")
         self.btn_open_output.setEnabled(False)
+        self.btn_hot_folder = QPushButton("Hot-Folder-Modus…")
         bottom_row.addWidget(self.btn_advanced)
         bottom_row.addWidget(self.btn_open_output)
+        bottom_row.addWidget(self.btn_hot_folder)
         layout.addLayout(bottom_row)
 
         return panel
@@ -384,12 +386,13 @@ class MainWindow(QMainWindow):
         self.btn_open_output.clicked.connect(self._on_open_output_clicked)
         self.btn_show_update.clicked.connect(self._on_show_update_clicked)
         self.btn_dismiss_update.clicked.connect(self._on_dismiss_update_clicked)
+        self.btn_hot_folder.clicked.connect(self._on_hot_folder_clicked)
 
     # ------------------------------------------------------------ Update-Check
     def _start_update_check(self) -> None:
-        self._update_check_thread, self._update_check_worker = run_update_check_in_thread(APP_VERSION)
-        self._update_check_worker.finished.connect(self._on_update_check_finished)
-        self._update_check_thread.start()
+        self._update_checker = AsyncUpdateChecker(APP_VERSION, parent=self)
+        self._update_checker.finished.connect(self._on_update_check_finished)
+        self._update_checker.start()
 
     def _on_update_check_finished(self, result: UpdateCheckResult) -> None:
         if not result.update_available or not result.latest_version:
@@ -409,6 +412,15 @@ class MainWindow(QMainWindow):
         self.controller.settings.check_for_updates_enabled = False
         self.controller.persist_settings()
         self.update_banner.setVisible(False)
+
+    def _on_hot_folder_clicked(self) -> None:
+        if self._hot_folder_dialog is None:
+            from src.app.ui.hot_folder_dialog import HotFolderDialog
+
+            self._hot_folder_dialog = HotFolderDialog(self.controller.settings, self)
+        self._hot_folder_dialog.show()
+        self._hot_folder_dialog.raise_()
+        self._hot_folder_dialog.activateWindow()
 
     # ------------------------------------------------------------- Helpers
     def _reload_profiles(self) -> None:

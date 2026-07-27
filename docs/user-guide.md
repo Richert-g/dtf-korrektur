@@ -327,6 +327,40 @@ Ist kein Internetzugang vorhanden oder GitHub nicht erreichbar, wird der
 Check stillschweigend übersprungen - es erscheint keine Fehlermeldung und
 die App funktioniert normal weiter.
 
+## Hot-Folder-Automatikmodus
+
+Über **"Hot-Folder-Modus…"** öffnet sich ein eigenes Fenster, das einen
+Ordner dauerhaft überwacht und neu hinzukommende Bilddateien automatisch mit
+den aktuell im Hauptfenster gewählten Einstellungen (Preset, ICC-Profil,
+Alpha-/Halo-/Farbparameter) verarbeitet - ideal für einen Druckerei-
+Workflow, bei dem laufend neue Dateien in einem Ordner abgelegt werden
+(z. B. aus einem anderen Programm oder Netzwerkfreigabe).
+
+**Bedienung:**
+
+1. Quellordner wählen (wird überwacht).
+2. Zielordner wählen (Ergebnisse werden hier abgelegt, wie bei der normalen
+   Verarbeitung inkl. Berichten und Vorschaubildern).
+3. Auf **"Starten"** klicken. Der Status zeigt "Läuft – überwacht: …" an, im
+   Verlauf erscheint jede verarbeitete Datei mit Zeitstempel und Ergebnis.
+4. **"Stoppen"** beendet die Überwachung wieder. Bereits verarbeitete Dateien
+   werden nicht erneut angefasst.
+
+**Wichtige Hinweise:**
+
+- Eine Datei wird erst angefasst, wenn ihre Größe über zwei Abtastungen
+  (Standard: alle 2 Sekunden) unverändert bleibt - so wird verhindert, dass
+  eine noch unvollständig kopierte/geschriebene Datei verarbeitet wird.
+- Der DTF-King-PDF-Export ist im Hot-Folder-Modus **nicht verfügbar**, da er
+  für jedes Bild eine manuelle Größen-/DPI-Bestätigung erfordert und daher
+  nicht unbeaufsichtigt laufen kann. Für den Automatikmodus bitte ein
+  anderes Ausgabeformat wählen (z. B. PNG).
+- Die Liste bereits verarbeiteter Dateien wird nur für die Dauer der
+  laufenden Überwachung gemerkt - nach einem Neustart der App würden
+  unveränderte Dateien im Quellordner erneut verarbeitet.
+- Beim Schließen des Fensters während einer laufenden Überwachung wird
+  nachgefragt, ob die Überwachung wirklich beendet werden soll.
+
 ## Wichtige Hinweise (keine falschen Versprechen)
 
 - Eine Bildschirmvorschau ist **keine Garantie** für das endgültige

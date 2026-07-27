@@ -44,22 +44,11 @@ def is_newer_version(latest: str, current: str) -> bool:
     return _parse_version(latest) > _parse_version(current)
 
 
-def check_for_update(
-    current_version: str,
-    url: str = GITHUB_RELEASES_LATEST_URL,
-    timeout: float = REQUEST_TIMEOUT_SECONDS,
-) -> UpdateCheckResult:
-    try:
-        request = urllib.request.Request(
-            url,
-            headers={"Accept": "application/vnd.github+json", "User-Agent": "DTF-Korrektur-UpdateCheck"},
-        )
-        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - feste https-URL, kein Benutzerinput
-            data = json.loads(response.read().decode("utf-8"))
-    except Exception as exc:  # noqa: BLE001 - Update-Check darf die App nie stoeren
-        logger.info("Update-Check nicht moeglich (kein Internet oder GitHub nicht erreichbar): %s", exc)
-        return UpdateCheckResult(update_available=False, error=str(exc))
-
+def parse_release_payload(data: object, current_version: str) -> UpdateCheckResult:
+    """Wertet die (bereits als JSON geparste) Antwort der GitHub-Releases-API
+    aus - unabhängig davon, wie sie abgerufen wurde (synchron über
+    check_for_update() oder asynchron über app.workers.update_check_async,
+    das denselben Payload aus einem QNetworkReply übergibt)."""
     tag_name = data.get("tag_name") if isinstance(data, dict) else None
     release_url = data.get("html_url") if isinstance(data, dict) else None
     if not tag_name:
@@ -74,3 +63,33 @@ def check_for_update(
         latest_version=tag_name,
         release_url=release_url,
     )
+
+
+def check_for_update(
+    current_version: str,
+    url: str = GITHUB_RELEASES_LATEST_URL,
+    timeout: float = REQUEST_TIMEOUT_SECONDS,
+) -> UpdateCheckResult:
+    """Synchrone (blockierende) Variante des Update-Checks. Wird von der
+    Oberfläche NICHT direkt verwendet - ein Hintergrund-Thread mit diesem
+    blockierenden Aufruf kollidiert beim schnellen Schließen der App mit der
+    Interpreter-Terminierung und kann zu einem nativen Absturz führen
+    (reproduziert: STATUS_STACK_BUFFER_OVERRUN, wenn der Prozess endet,
+    während die Anfrage noch läuft). Die Oberfläche nutzt stattdessen den
+    nicht-blockierenden app.workers.update_check_async.AsyncUpdateChecker
+    (QNetworkAccessManager, läuft über die Qt-Ereignisschleife statt über
+    einen eigenen OS-Thread). Diese Funktion bleibt für nicht-GUI-Kontexte
+    (z. B. ein künftiges Kommandozeilen-Werkzeug) erhalten.
+    """
+    try:
+        request = urllib.request.Request(
+            url,
+            headers={"Accept": "application/vnd.github+json", "User-Agent": "DTF-Korrektur-UpdateCheck"},
+        )
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - feste https-URL, kein Benutzerinput
+            data = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:  # noqa: BLE001 - Update-Check darf die App nie stoeren
+        logger.info("Update-Check nicht moeglich (kein Internet oder GitHub nicht erreichbar): %s", exc)
+        return UpdateCheckResult(update_available=False, error=str(exc))
+
+    return parse_release_payload(data, current_version)

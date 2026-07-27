@@ -214,6 +214,12 @@ Prüft beim Start unaufdringlich im Hintergrund gegen die öffentliche
 GitHub-Releases-API, ob eine neuere Version verfügbar ist (kein
 Auto-Download, keine persönlichen Daten, jederzeit abschaltbar).
 
+**Hot-Folder-Automatikmodus**
+Überwacht einen Ordner dauerhaft und verarbeitet neu hinzukommende Bilder
+automatisch mit den aktuell gewählten Einstellungen - für Druckerei-
+Workflows mit laufend neuen Dateien (nicht verfügbar für den DTF-King-PDF-
+Export, der eine manuelle Bestätigung pro Bild erfordert).
+
 Ausführliche Erklärung aller Funktionen: [docs/user-guide.md](docs/user-guide.md)
 
 ## Dokumentation
