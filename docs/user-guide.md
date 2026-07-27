@@ -215,14 +215,22 @@ die manuelle Auswahl. **Schwarzpunktkompensation** verbessert die Zeichnung
 in dunklen Bildbereichen bei der Umrechnung, ohne die übrigen Farben zu
 verschieben - i. d. R. aktiviert lassen.
 
-### "Pixel löschen bis Alpha-Wert"
+### "Pixel mit geringer Deckkraft entfernen" und "... vollständig deckend setzen"
 
-Löscht alle Pixel mit Alpha-Wert 0 bis einschließlich des eingestellten
-Werts vollständig (0 = vollständig transparent, 255 = vollständig deckend).
-Zusätzlich wird eine Prozentangabe angezeigt (z. B. "241 von 255 - Pixel bis
-etwa 94,5 % Deckkraft werden gelöscht"). Standardwert: **241** (bewusst
-aggressiv). Wählbarer Bereich: 0-254 - 255 ist nicht wählbar, da dadurch auch
-vollständig deckende Pixel gelöscht würden.
+Beide Funktionen lassen sich über eine eigene Checkbox **unabhängig
+voneinander** ein- und ausschalten. Ist eine Checkbox deaktiviert, wird das
+zugehörige Schwellenwert-Feld ausgegraut, der gespeicherte Wert bleibt aber
+erhalten und erscheint beim erneuten Aktivieren unverändert wieder - der
+Verarbeitungsschritt selbst wird bei Deaktivierung vollständig übersprungen
+(auch in Berichten taucht dann kein entsprechender Schritt mehr auf).
+
+**"Pixel mit geringer Deckkraft entfernen"** löscht alle Pixel mit Alpha-Wert
+0 bis einschließlich des eingestellten Schwellenwerts vollständig (0 =
+vollständig transparent, 255 = vollständig deckend). Zusätzlich wird eine
+Prozentangabe angezeigt (z. B. "241 von 255 - Pixel bis etwa 94,5 %
+Deckkraft werden gelöscht"). Standardwert: **241** (bewusst aggressiv),
+standardmäßig **aktiviert**. Wählbarer Bereich: 0-254 - 255 ist nicht
+wählbar, da dadurch auch vollständig deckende Pixel gelöscht würden.
 
 Ab einem Wert von 220 erscheint der Hinweis: "Hoher Wert: Weiche Schatten,
 Rauch, Glow und geglättete Kanten können entfernt werden." Im
@@ -233,19 +241,19 @@ konkreter Modus gewählt (z. B. "Nur Störpixel entfernen"), gilt der
 Schwellenwert bewusst für das gesamte Bild - inklusive möglicher weicher
 Flächen.
 
-### "Pixel ab Alpha-Wert auf volle Deckkraft setzen"
-
-Das Gegenstück zu "Pixel löschen bis Alpha-Wert": Setzt alle Pixel mit einem
-Alpha-Wert ab einschließlich des eingestellten Werts auf volle Deckkraft
-(255). Ebenfalls mit Prozentangabe (z. B. "242 von 255 - Pixel ab etwa
-94,9 % Deckkraft werden voll deckend gemacht"). Standardwert: **242**.
+**"Pixel mit hoher Deckkraft vollständig deckend setzen"** ist das
+Gegenstück: Setzt alle Pixel mit einem Alpha-Wert ab einschließlich des
+eingestellten Schwellenwerts auf volle Deckkraft (255). Ebenfalls mit
+Prozentangabe (z. B. "242 von 255 - Pixel ab etwa 94,9 % Deckkraft werden
+voll deckend gemacht"). Standardwert: **242**, standardmäßig **aktiviert**.
 Wählbarer Bereich: 0-255.
 
-Gilt für die Alpha-Modi "Nur Störpixel entfernen" und "Sanfte Bereinigung".
-Im **Automatikmodus** greift dieselbe Schutzmaske wie beim Löschen: erkannte
-große, weiche Flächen (Schatten/Rauch/Glow) werden nicht pauschal hart
-gemacht. Im **manuell** gewählten Modus gilt der Schwellenwert wie beim
-Löschen für das gesamte Bild.
+Beide gelten für die Alpha-Modi "Nur Störpixel entfernen" und "Sanfte
+Bereinigung" (nicht für "Harte Kante", die eine eigene, automatische
+Schwelle verwendet). Im **Automatikmodus** greift für beide dieselbe
+Schutzmaske: erkannte große, weiche Flächen (Schatten/Rauch/Glow) werden
+weder gelöscht noch pauschal hart gemacht. Im **manuell** gewählten Modus
+gilt der jeweils aktivierte Schwellenwert für das gesamte Bild.
 
 ## Eigene ICC-Profile hinzufügen
 

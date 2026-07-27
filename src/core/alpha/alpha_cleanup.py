@@ -23,6 +23,16 @@ zugrunde liegende Funktion `_strengthen_near_opaque` gilt für NOISE_ONLY und
 SOFT_CLEANUP gleichermaßen und wird im Automatikmodus durch dieselbe
 Schutzmaske eingeschränkt wie die Löschung - sonst könnte ein dichter Kern
 eines bewussten weichen Schattens/Glows fälschlich hart gemacht werden.
+
+Beide Funktionen lassen sich unabhängig voneinander über
+`weak_alpha_threshold_enabled` bzw. `near_opaque_threshold_enabled`
+deaktivieren - der jeweils gespeicherte Schwellenwert bleibt dabei
+unverändert erhalten, nur der Verarbeitungsschritt selbst wird übersprungen
+(`_remove_weak_noise`/`_strengthen_near_opaque` geben das Array dann
+unverändert zurück). Sind beide Pixel-Bedingungen für ein Pixel gleichzeitig
+erfüllt (nur bei ungewöhnlicher Konfiguration mit sich überschneidenden
+Schwellenwerten möglich), gewinnt die Löschung, da `_remove_weak_noise` immer
+zuerst läuft - entspricht einem klassischen if/elif mit Vorrang fürs Löschen.
 """
 from __future__ import annotations
 
@@ -60,6 +70,8 @@ def _mode_for_image_type(image_type: ImageType) -> AlphaMode:
 def _remove_weak_noise(
     alpha: np.ndarray, thresholds: AlphaThresholds, protect_mask: np.ndarray | None = None
 ) -> tuple[np.ndarray, int]:
+    if not thresholds.weak_alpha_threshold_enabled:
+        return alpha.copy(), 0
     out = alpha.copy()
     # Inklusive Grenze wie gefordert: alpha <= threshold wird gelöscht (NICHT alpha < threshold).
     weak_mask = (alpha > 0) & (alpha <= thresholds.weak_alpha_threshold)
@@ -72,6 +84,8 @@ def _remove_weak_noise(
 def _strengthen_near_opaque(
     alpha: np.ndarray, thresholds: AlphaThresholds, protect_mask: np.ndarray | None = None
 ) -> tuple[np.ndarray, int]:
+    if not thresholds.near_opaque_threshold_enabled:
+        return alpha.copy(), 0
     out = alpha.copy()
     # Inklusive Grenze wie bei "Pixel löschen bis Alpha-Wert": alpha >= threshold
     # wird auf volle Deckkraft gesetzt (NICHT alpha > threshold).

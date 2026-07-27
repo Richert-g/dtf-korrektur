@@ -22,6 +22,9 @@ class AlphaThresholds:
     # core.analysis.alpha_analysis.compute_large_soft_region_mask().
     # Zulässiger Bereich in der Oberfläche: 0-254 (255 wäre "alles löschen").
     weak_alpha_threshold: int = 241
+    # Schaltet "Pixel löschen bis Alpha-Wert" unabhängig vom gespeicherten
+    # Schwellenwert ein/aus - der Wert selbst bleibt beim Deaktivieren erhalten.
+    weak_alpha_threshold_enabled: bool = True
     # Ab diesem Wert zeigt die Oberfläche eine Warnung vor aggressivem Löschen an
     weak_alpha_threshold_warning_from: int = 220
     # Untere Grenze für den mittleren Bereich (5-20 %)
@@ -29,6 +32,9 @@ class AlphaThresholds:
     mid_high_threshold: int = 51  # ~20 % von 255
     # Ab hier gilt ein Pixel als "fast deckend" und wird auf 255 gesetzt
     near_opaque_threshold: int = 242  # ~95 %
+    # Schaltet "Pixel ab Alpha-Wert auf volle Deckkraft setzen" unabhängig vom
+    # gespeicherten Schwellenwert ein/aus - der Wert bleibt beim Deaktivieren erhalten.
+    near_opaque_threshold_enabled: bool = True
     # Harte Kante: automatisch ermittelter Schwellenwert (Fallback-Default)
     hard_edge_default_threshold: int = 128
     # Kleine Pixelinseln (Fläche in Pixel) unterhalb dieser Größe werden entfernt

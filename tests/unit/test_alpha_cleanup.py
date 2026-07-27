@@ -188,3 +188,93 @@ def test_protection_report_step_logged_when_shadow_protected():
     report = ImageProcessingReport()
     clean_alpha(arr, ImageType.SOFT_SHADOW, settings, report=report)
     assert any("geschützt" in step.description for step in report.applied_steps)
+
+
+# --- Unabhängige Aktivierung/Deaktivierung der beiden Alpha-Schwellenwerte ---
+
+
+def test_weak_alpha_threshold_disabled_skips_deletion_in_noise_only():
+    arr = np.zeros((8, 8, 4), dtype=np.uint8)
+    arr[:, :, 3] = 3  # weit unterhalb des Standard-Löschen-Schwellenwerts (241)
+    settings = ProcessingSettings()
+    settings.alpha_mode = AlphaMode.NOISE_ONLY
+    settings.alpha.weak_alpha_threshold_enabled = False
+
+    result = clean_alpha(arr, ImageType.PHOTO, settings, report=None)
+
+    assert (result.rgba[:, :, 3] == 3).all()  # unverändert, obwohl <= Schwellenwert
+    assert result.removed_pixel_count == 0
+
+
+def test_weak_alpha_threshold_value_kept_while_disabled():
+    """Der Schwellenwert selbst bleibt in den Einstellungen unverändert, auch
+    wenn die Funktion deaktiviert ist - nur die Anwendung wird übersprungen."""
+    settings = ProcessingSettings()
+    settings.alpha.weak_alpha_threshold_enabled = False
+    settings.alpha.weak_alpha_threshold = 199
+    assert settings.alpha.weak_alpha_threshold == 199
+    assert settings.alpha.weak_alpha_threshold_enabled is False
+
+
+def test_near_opaque_threshold_disabled_skips_strengthening_in_noise_only():
+    arr = np.zeros((8, 8, 4), dtype=np.uint8)
+    arr[:, :, 3] = 250  # oberhalb des Standard-Volldeckend-Schwellenwerts (242)
+    settings = ProcessingSettings()
+    settings.alpha_mode = AlphaMode.NOISE_ONLY
+    settings.alpha.weak_alpha_threshold_enabled = False  # isoliert nur den Strengthen-Test
+    settings.alpha.near_opaque_threshold_enabled = False
+
+    result = clean_alpha(arr, ImageType.PHOTO, settings, report=None)
+
+    assert (result.rgba[:, :, 3] == 250).all()  # unverändert, obwohl >= Schwellenwert
+    assert result.strengthened_pixel_count == 0
+
+
+def test_both_thresholds_disabled_leaves_alpha_completely_unchanged():
+    arr = np.zeros((8, 8, 4), dtype=np.uint8)
+    arr[0, 0, 3] = 0
+    arr[1, 1, 3] = 3
+    arr[2, 2, 3] = 128
+    arr[3, 3, 3] = 250
+    arr[4, 4, 3] = 255
+    settings = ProcessingSettings()
+    settings.alpha_mode = AlphaMode.NOISE_ONLY
+    settings.alpha.weak_alpha_threshold_enabled = False
+    settings.alpha.near_opaque_threshold_enabled = False
+
+    result = clean_alpha(arr, ImageType.PHOTO, settings, report=None)
+
+    assert np.array_equal(result.rgba[:, :, 3], arr[:, :, 3])
+    assert result.removed_pixel_count == 0
+    assert result.strengthened_pixel_count == 0
+
+
+def test_thresholds_independently_toggleable_in_soft_cleanup_mode():
+    """Auch im Modus 'Sanfte Bereinigung' (verwendet dieselben zwei Funktionen
+    intern über _apply_soft_cleanup) müssen beide Schaltflächen unabhängig
+    wirken."""
+    arr = np.zeros((8, 8, 4), dtype=np.uint8)
+    arr[:, :, 3] = 250
+    settings = ProcessingSettings()
+    settings.alpha_mode = AlphaMode.SOFT_CLEANUP
+    settings.alpha.near_opaque_threshold_enabled = False
+
+    result = clean_alpha(arr, ImageType.ILLUSTRATION, settings, report=None)
+
+    assert (result.rgba[:, :, 3] == 250).all()
+
+
+def test_disabling_one_threshold_does_not_affect_the_other():
+    arr = np.zeros((8, 8, 4), dtype=np.uint8)
+    arr[0, 0, 3] = 3  # sollte weiterhin geloescht werden
+    arr[1, 1, 3] = 250  # sollte NICHT mehr volldeckend gemacht werden
+    settings = ProcessingSettings()
+    settings.alpha_mode = AlphaMode.NOISE_ONLY
+    settings.alpha.near_opaque_threshold_enabled = False
+
+    result = clean_alpha(arr, ImageType.PHOTO, settings, report=None)
+
+    assert result.rgba[0, 0, 3] == 0
+    assert result.rgba[1, 1, 3] == 250
+    assert result.removed_pixel_count == 1
+    assert result.strengthened_pixel_count == 0

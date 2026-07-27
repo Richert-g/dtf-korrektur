@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QSpinBox,
@@ -62,9 +63,20 @@ class AdvancedSettingsDialog(QDialog):
 
         weak_container = QWidget()
         weak_layout = QVBoxLayout(weak_container)
-        weak_layout.setContentsMargins(0, 0, 0, 0)
+        weak_layout.setContentsMargins(0, 4, 0, 4)
         weak_layout.setSpacing(2)
 
+        self.weak_enabled_checkbox = QCheckBox("Pixel mit geringer Deckkraft entfernen")
+        self.weak_enabled_checkbox.setChecked(a.weak_alpha_threshold_enabled)
+        self.weak_enabled_checkbox.setToolTip(
+            "Löscht Pixel mit geringer Deckkraft vollständig. Bei Deaktivierung bleibt der "
+            "eingestellte Schwellenwert erhalten, der Verarbeitungsschritt wird aber übersprungen."
+        )
+        weak_layout.addWidget(self.weak_enabled_checkbox)
+
+        weak_threshold_row = QHBoxLayout()
+        weak_threshold_row.setContentsMargins(20, 0, 0, 0)
+        weak_threshold_row.addWidget(QLabel("Schwellenwert:"))
         self.weak_threshold = self._spin(
             self.WEAK_ALPHA_THRESHOLD_MIN,
             self.WEAK_ALPHA_THRESHOLD_MAX,
@@ -72,57 +84,81 @@ class AdvancedSettingsDialog(QDialog):
             "Alle Pixel mit Alpha 0 bis einschließlich diesem Wert werden vollständig transparent "
             "(0 = vollständig transparent, 255 = vollständig deckend).",
         )
-        weak_layout.addWidget(self.weak_threshold)
+        weak_threshold_row.addWidget(self.weak_threshold)
+        weak_threshold_row.addStretch(1)
+        weak_layout.addLayout(weak_threshold_row)
 
         weak_help = QLabel(
             "Alle Pixel mit einem Alpha-Wert von 0 bis einschließlich des eingestellten Werts werden "
             "vollständig transparent.\n0 = vollständig transparent, 255 = vollständig deckend"
         )
         weak_help.setWordWrap(True)
+        weak_help.setContentsMargins(20, 0, 0, 0)
         weak_layout.addWidget(weak_help)
 
         self.weak_threshold_percent_label = QLabel()
         self.weak_threshold_percent_label.setWordWrap(True)
+        self.weak_threshold_percent_label.setContentsMargins(20, 0, 0, 0)
         weak_layout.addWidget(self.weak_threshold_percent_label)
 
         self.weak_threshold_warning_label = QLabel()
         self.weak_threshold_warning_label.setWordWrap(True)
         self.weak_threshold_warning_label.setStyleSheet("color: #a15c00; font-weight: bold;")
+        self.weak_threshold_warning_label.setContentsMargins(20, 0, 0, 0)
         weak_layout.addWidget(self.weak_threshold_warning_label)
 
         self.weak_threshold.valueChanged.connect(self._update_weak_threshold_info)
         self._update_weak_threshold_info(self.weak_threshold.value())
+        self.weak_enabled_checkbox.toggled.connect(self.weak_threshold.setEnabled)
+        self.weak_threshold.setEnabled(a.weak_alpha_threshold_enabled)
 
-        form.addRow("Pixel löschen bis Alpha-Wert", weak_container)
+        form.addRow(weak_container)
 
         strengthen_container = QWidget()
         strengthen_layout = QVBoxLayout(strengthen_container)
-        strengthen_layout.setContentsMargins(0, 0, 0, 0)
+        strengthen_layout.setContentsMargins(0, 4, 0, 4)
         strengthen_layout.setSpacing(2)
 
+        self.near_opaque_enabled_checkbox = QCheckBox("Pixel mit hoher Deckkraft vollständig deckend setzen")
+        self.near_opaque_enabled_checkbox.setChecked(a.near_opaque_threshold_enabled)
+        self.near_opaque_enabled_checkbox.setToolTip(
+            "Setzt Pixel mit hoher Deckkraft auf volle Deckkraft (255). Bei Deaktivierung bleibt der "
+            "eingestellte Schwellenwert erhalten, der Verarbeitungsschritt wird aber übersprungen."
+        )
+        strengthen_layout.addWidget(self.near_opaque_enabled_checkbox)
+
+        strengthen_threshold_row = QHBoxLayout()
+        strengthen_threshold_row.setContentsMargins(20, 0, 0, 0)
+        strengthen_threshold_row.addWidget(QLabel("Schwellenwert:"))
         self.near_opaque_threshold = self._spin(
             0,
             255,
             a.near_opaque_threshold,
             "Alle Pixel mit Alpha ab einschließlich diesem Wert werden auf volle Deckkraft (255) gesetzt.",
         )
-        strengthen_layout.addWidget(self.near_opaque_threshold)
+        strengthen_threshold_row.addWidget(self.near_opaque_threshold)
+        strengthen_threshold_row.addStretch(1)
+        strengthen_layout.addLayout(strengthen_threshold_row)
 
         strengthen_help = QLabel(
             "Alle Pixel mit einem Alpha-Wert ab einschließlich des eingestellten Werts werden auf volle "
             "Deckkraft gesetzt.\n0 = vollständig transparent, 255 = vollständig deckend"
         )
         strengthen_help.setWordWrap(True)
+        strengthen_help.setContentsMargins(20, 0, 0, 0)
         strengthen_layout.addWidget(strengthen_help)
 
         self.near_opaque_percent_label = QLabel()
         self.near_opaque_percent_label.setWordWrap(True)
+        self.near_opaque_percent_label.setContentsMargins(20, 0, 0, 0)
         strengthen_layout.addWidget(self.near_opaque_percent_label)
 
         self.near_opaque_threshold.valueChanged.connect(self._update_near_opaque_info)
         self._update_near_opaque_info(self.near_opaque_threshold.value())
+        self.near_opaque_enabled_checkbox.toggled.connect(self.near_opaque_threshold.setEnabled)
+        self.near_opaque_threshold.setEnabled(a.near_opaque_threshold_enabled)
 
-        form.addRow("Pixel ab Alpha-Wert auf volle Deckkraft setzen", strengthen_container)
+        form.addRow(strengthen_container)
 
         self.min_island = self._spin(0, 500, a.min_island_size_px, "Pixelinseln kleiner als dieser Wert werden entfernt.")
         form.addRow("Min. Inselgröße (px)", self.min_island)
@@ -268,7 +304,9 @@ class AdvancedSettingsDialog(QDialog):
         # verloren). Explizit re-wrappen, damit spaeteres .value nicht crasht.
         self.settings.alpha_mode = AlphaMode(self.alpha_mode_combo.currentData())
         a.weak_alpha_threshold = self.weak_threshold.value()
+        a.weak_alpha_threshold_enabled = self.weak_enabled_checkbox.isChecked()
         a.near_opaque_threshold = self.near_opaque_threshold.value()
+        a.near_opaque_threshold_enabled = self.near_opaque_enabled_checkbox.isChecked()
         a.min_island_size_px = self.min_island.value()
         a.max_hole_fill_size_px = self.max_hole.value()
         a.edge_choke_px = self.edge_choke.value()
