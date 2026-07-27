@@ -7,7 +7,6 @@ vorgenommene Feinabstimmungen bleiben dadurch so weit wie möglich erhalten.
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
 
 from src.config.defaults import ProcessingSettings
 from src.models.enums import AlphaMode, OutputFormat, PresetName, RenderingIntent
@@ -56,17 +55,15 @@ def _custom(s: ProcessingSettings) -> None:
     return  # keine Änderungen - der Benutzer steuert alles selbst
 
 
-def _find_iso_coated_v2_profile_path() -> str | None:
-    """Sucht unter mitgelieferten/importierten Profilen eindeutig eines mit
-    'ISO Coated v2' in der Beschreibung. Findet NIEMALS ein ähnlich benanntes
-    Profil (z. B. FOGRA39) als Ersatz - nur eine exakte Beschreibungs-Teilzeichenkette.
-    """
+def _find_bundled_profile_by_filename(filename: str) -> str | None:
+    """Sucht unter mitgelieferten/importierten Profilen eines mit genau diesem
+    Dateinamen (unabhängig vom Unterordner, z. B. 'CMYK/CoatedFOGRA39.icc')."""
     from src.core.color.icc_manager import list_available_profiles
-    from src.core.color.profile_validation import find_profile_by_description_fragment
 
-    candidates = [info.path for info in list_available_profiles()]
-    found = find_profile_by_description_fragment(candidates, "iso coated v2")
-    return str(found) if found else None
+    for info in list_available_profiles():
+        if info.path.name == filename:
+            return str(info.path)
+    return None
 
 
 def _dtf_king_iso_coated_v2(s: ProcessingSettings) -> None:
@@ -86,21 +83,14 @@ def _dtf_king_iso_coated_v2(s: ProcessingSettings) -> None:
     s.gamut.max_auto_saturation_reduction = 0.0
     s.gamut.enable_auto_gamut_correction = False
 
-    # Nur ein Profil setzen, dessen Beschreibung eindeutig "ISO Coated v2"
-    # enthält. Wird keines gefunden, bleibt das Feld leer - der Export
-    # bricht dann mit einer klaren Meldung ab, statt ein ähnliches Profil
-    # (z. B. FOGRA39) stillschweigend zu verwenden.
-    found_path = _find_iso_coated_v2_profile_path()
-    if found_path:
-        s.color.target_profile_path = found_path
-    elif s.color.target_profile_path:
-        from src.core.color.profile_validation import validate_cmyk_output_profile
-
-        current = validate_cmyk_output_profile(Path(s.color.target_profile_path))
-        if not (current.ok and current.description and "iso coated v2" in current.description.lower()):
-            s.color.target_profile_path = None
-    else:
-        s.color.target_profile_path = None
+    # Frei wählbares CMYK-Zielprofil: ein bereits ausgewähltes Profil bleibt
+    # unangetastet (der Benutzer kann im ICC-Zielprofil-Feld jederzeit ein
+    # beliebiges CMYK-Profil wählen, z. B. das echte "ISO Coated v2 (ECI)"
+    # nach dem Import). Ist gar kein Profil ausgewählt, wird das mitgelieferte
+    # "Coated FOGRA39" als sinnvoller Standard verwendet, statt den Export
+    # mit leerem Profil zu blockieren.
+    if not s.color.target_profile_path:
+        s.color.target_profile_path = _find_bundled_profile_by_filename("CoatedFOGRA39.icc")
 
     # --- Ausgabe: einseitige CMYK-PDF, 300 dpi, transparenter Hintergrund ---
     s.export.output_format = OutputFormat.PDF_CMYK
@@ -130,9 +120,10 @@ PRESET_DESCRIPTIONS: dict[PresetName, str] = {
     PresetName.TRANSPARENCY_ONLY: "Nur die Transparenz wird bereinigt, keine Farbanpassung.",
     PresetName.COLOR_ONLY: "Nur die Farben werden für das Druckprofil angepasst, Transparenz bleibt unverändert.",
     PresetName.DTF_KING_ISO_COATED_V2: (
-        "Druckfertige einseitige CMYK-PDF für den Druckdienstleister DTF-King: ICC-Konvertierung nach "
-        "ISO Coated v2 (ECI), keine zusätzliche Sättigungs-/Gamut-Korrektur, transparenter Hintergrund, "
-        "mind. 300 dpi. Benötigt das importierte ICC-Profil 'ISO Coated v2 (ECI)'."
+        "Druckfertige einseitige CMYK-PDF für den Druckdienstleister DTF-King: einmalige ICC-Konvertierung "
+        "nach dem gewählten CMYK-Zielprofil (Standard: Coated FOGRA39, z. B. per Import auf 'ISO Coated v2 "
+        "(ECI)' umstellbar), keine zusätzliche Sättigungs-/Gamut-Korrektur, transparenter Hintergrund, "
+        "mind. 300 dpi."
     ),
     PresetName.CUSTOM: "Alle Einstellungen werden manuell im Expertenbereich festgelegt.",
 }

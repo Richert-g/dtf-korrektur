@@ -39,32 +39,35 @@ def test_dtf_king_preset_keeps_existing_alpha_halo_enabled():
     assert s.halo.enabled is True
 
 
-def test_dtf_king_preset_never_silently_substitutes_similar_profile():
-    """Ohne ein tatsächlich als 'ISO Coated v2' beschriftetes Profil im
-    Bestand darf NIEMALS automatisch z. B. FOGRA39 als Ersatz gewählt werden."""
+def test_dtf_king_preset_keeps_already_selected_profile():
+    """Der Benutzer kann im ICC-Zielprofil-Feld frei ein beliebiges CMYK-Profil
+    waehlen (z. B. FOGRA39 oder ein importiertes 'ISO Coated v2 (ECI)') - das
+    Preset darf ein bereits ausgewaehltes Profil nicht ueberschreiben/loeschen."""
     s = ProcessingSettings()
     s.color.target_profile_path = "resources/profiles/CMYK/CoatedFOGRA39.icc"
     apply_preset(s, PresetName.DTF_KING_ISO_COATED_V2)
 
+    assert s.color.target_profile_path == "resources/profiles/CMYK/CoatedFOGRA39.icc"
+
+
+def test_dtf_king_preset_defaults_to_fogra39_when_no_profile_selected():
+    """Ist kein Zielprofil ausgewaehlt, wird automatisch das mitgelieferte
+    Coated FOGRA39 als Standard gesetzt, statt den Export zu blockieren."""
+    s = ProcessingSettings()
     assert s.color.target_profile_path is None
+    apply_preset(s, PresetName.DTF_KING_ISO_COATED_V2)
+
+    assert s.color.target_profile_path is not None
+    assert "CoatedFOGRA39" in s.color.target_profile_path
 
 
-def test_dtf_king_preset_finds_real_iso_coated_v2_profile_if_imported(monkeypatch):
-    from src.core.color.icc_manager import ProfileInfo
+def test_dtf_king_preset_default_profile_is_a_valid_cmyk_profile():
+    from pathlib import Path
 
-    def fake_list_available_profiles():
-        return [ProfileInfo(name="ISO Coated v2 (ECI)", path=__import__("pathlib").Path("resources/profiles/CMYK/CoatedFOGRA39.icc"))]
-
-    def fake_validate(path):
-        from src.core.color.profile_validation import ProfileValidationResult
-
-        return ProfileValidationResult(ok=True, path=path, description="ISO Coated v2 (ECI)", color_space="CMYK")
-
-    monkeypatch.setattr("src.core.color.icc_manager.list_available_profiles", fake_list_available_profiles)
-    monkeypatch.setattr("src.core.color.profile_validation.validate_cmyk_output_profile", fake_validate)
+    from src.core.color.profile_validation import validate_cmyk_output_profile
 
     s = ProcessingSettings()
     apply_preset(s, PresetName.DTF_KING_ISO_COATED_V2)
 
-    assert s.color.target_profile_path is not None
-    assert "FOGRA39" in s.color.target_profile_path or "CoatedFOGRA39" in s.color.target_profile_path
+    result = validate_cmyk_output_profile(Path(s.color.target_profile_path))
+    assert result.ok is True

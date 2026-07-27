@@ -129,14 +129,12 @@ entsteht ausschließlich durch die eine, echte ICC-Transformation.
 
 **So verwendest du es:**
 
-1. Das offizielle ICC-Profil **"ISO Coated v2 (ECI)"** einmalig über
-   "Importieren…" hinzufügen (z. B. von eci.org). Die App ersetzt es
-   **niemals** automatisch durch ein ähnliches, bereits mitgeliefertes
-   Profil (z. B. FOGRA39) - ohne dieses konkrete Profil bricht der Export
-   mit einer klaren Fehlermeldung ab.
-2. Preset "DTF-King – ISO Coated v2 (ECI)" auswählen. Wurde das Profil in
-   Schritt 1 bereits importiert, wird es automatisch als Zielprofil
-   übernommen (erkennbar an "ISO Coated v2" in der Profilbeschreibung).
+1. Preset "DTF-King – ISO Coated v2 (ECI)" auswählen.
+2. Im Feld **"ICC-Zielprofil"** ein beliebiges CMYK-Profil wählen - z. B.
+   eines der mitgelieferten (Standard bei leerem Feld: **Coated FOGRA39**)
+   oder das offizielle **"ISO Coated v2 (ECI)"** (einmalig über
+   "Importieren…" hinzufügen, z. B. von eci.org). Das Preset überschreibt
+   ein bereits gewähltes Profil nicht - die Wahl bleibt bei dir.
 3. Bild(er) auswählen, Ausgabeordner wählen, auf "Automatisch optimieren"
    klicken.
 4. Es öffnet sich ein Dialog: ICC-Profilstatus, Breite/Höhe/Ziel-dpi (Standard
