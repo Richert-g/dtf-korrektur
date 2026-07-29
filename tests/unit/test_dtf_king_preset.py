@@ -29,7 +29,7 @@ def test_switching_away_from_dtf_king_resets_pdf_only_fields():
     apply_preset(s, PresetName.DTF_AUTO)
     assert s.export.output_format == OutputFormat.PNG_RGB
     assert s.gamut.enable_auto_gamut_correction is True
-    assert s.gamut.max_auto_saturation_reduction == 0.15
+    assert s.gamut.max_auto_saturation_reduction == 0.0
 
 
 def test_dtf_king_preset_keeps_existing_alpha_halo_enabled():

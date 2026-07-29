@@ -204,10 +204,11 @@ Zielsystem ist Windows.
 **Transparenz-/Alpha-Bereinigung**
 - Vier Modi: Auto, Nur Störpixel entfernen, Sanfte Bereinigung, Harte Kante
   (Otsu-Schwelle).
-- **Pixel löschen bis Alpha-Wert** und **Pixel ab Alpha-Wert auf volle
-  Deckkraft setzen** - beide mit einstellbarem Schwellenwert, inklusiver
-  Grenze und automatischem Schutz großer, bewusster weicher Flächen
-  (Schatten/Rauch/Glow) im Automatikmodus.
+- **Pixel mit geringer Deckkraft bearbeiten** (Transparenz auf 0 setzen oder
+  Pixel vollständig löschen, RGB inklusive) und **Pixel ab Alpha-Wert auf
+  volle Deckkraft setzen** - beide mit einstellbarem Schwellenwert,
+  inklusiver Grenze, konfigurierbarer Reihenfolge und automatischem Schutz
+  großer, bewusster weicher Flächen (Schatten/Rauch/Glow) im Automatikmodus.
 - Entfernung kleiner Pixelinseln, Schließen kleiner transparenter Löcher,
   Kantenrücknahme/-glättung.
 - **Farbsaum-/Halo-Korrektur** an halbtransparenten Kanten.

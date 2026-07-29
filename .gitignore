@@ -12,3 +12,6 @@ resources/sample_images/_test_output/
 /ICC-Profiles/
 
 neu_pruefen.txt
+
+# Lokal erzeugte Testbilder zur manuellen Fehlersuche - kein Projektbestandteil.
+/alpha_testbilder/

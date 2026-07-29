@@ -2,27 +2,48 @@
 
 Alle Schwellenwerte kommen zentral aus src.config.defaults.AlphaThresholds.
 
-Hinweis zu "Pixel löschen bis Alpha-Wert" (`weak_alpha_threshold`, inklusive
-Grenze: alpha <= threshold wird gelöscht): Die zugrunde liegende Funktion
-`_remove_weak_noise` wendet diesen Schwellenwert für sich genommen GLOBAL auf
-das gesamte Bild an - sie kennt keine Bildbereiche. Da der Standardwert (241)
-bewusst sehr aggressiv ist, würde eine rein globale Anwendung auch bewusste
-weiche Schattenflächen zerstören. Deshalb berechnet `clean_alpha` im
-AUTOMATIKMODUS (settings.alpha_mode == AlphaMode.AUTO) zusätzlich eine
-Schutzmaske (`compute_large_soft_region_mask`) für große, nicht am Motivrand
-liegende Halbtransparenz-Flächen und nimmt diese von der Löschung aus. Wählt
-der Benutzer dagegen manuell einen konkreten Modus (z. B. "Nur Störpixel
+Hinweis zu "Pixel mit geringer Deckkraft bearbeiten" (`weak_alpha_threshold`,
+inklusive Grenze: alpha <= threshold wird bearbeitet, alpha > threshold
+bleibt unverändert): Die zugrunde liegende Funktion `_remove_weak_noise`
+wendet diesen Schwellenwert für sich genommen GLOBAL auf das gesamte Bild an
+- sie kennt keine Bildbereiche. Da der Standardwert (254) bewusst sehr
+aggressiv ist, würde eine rein globale Anwendung auch bewusste weiche
+Schattenflächen zerstören. Deshalb berechnet `clean_alpha` im AUTOMATIKMODUS
+(settings.alpha_mode == AlphaMode.AUTO) zusätzlich eine Schutzmaske
+(`compute_large_soft_region_mask`) für große, nicht am Motivrand liegende
+Halbtransparenz-Flächen und nimmt diese von der Bearbeitung aus. Wählt der
+Benutzer dagegen manuell einen konkreten Modus (z. B. "Nur Störpixel
 entfernen"), wird der Schwellenwert bewusst weiterhin auf das gesamte Bild
 angewendet - die Oberfläche zeigt dafür eine Warnung an (siehe
 AdvancedSettingsDialog).
+
+Über `weak_alpha_action` (`WeakAlphaAction`) lässt sich wählen, WIE die
+betroffenen Pixel bearbeitet werden: SET_TRANSPARENT setzt nur den Alpha-
+Wert auf 0 (RGB bleibt erhalten, bisheriges Verhalten), DELETE_PIXEL setzt
+zusätzlich auch die RGB-Kanäle auf 0 (keine Farbinformationen bleiben
+zurück). Die Auswahlmaske selbst (`alpha <= threshold`, ohne Ausnahme für
+bereits transparente Pixel) ist für beide Varianten identisch - so kann
+DELETE_PIXEL auch bei bereits vorher transparenten Pixeln (Alpha 0) noch
+vorhandene RGB-Restwerte entfernen. Für die Berichtszählung
+("removed_pixel_count") werden dagegen nur tatsächlich zuvor sichtbare Pixel
+(Alpha > 0 vor der Bearbeitung) gezählt, damit der Bericht nicht bereits
+unsichtbare Pixel als "entfernt" ausweist.
 
 Symmetrisch dazu setzt "Pixel ab Alpha-Wert auf volle Deckkraft setzen"
 (`near_opaque_threshold`, ebenfalls inklusive Grenze: alpha >= threshold wird
 auf 255 gesetzt) alle ausreichend deckenden Pixel auf volle Deckkraft. Die
 zugrunde liegende Funktion `_strengthen_near_opaque` gilt für NOISE_ONLY und
 SOFT_CLEANUP gleichermaßen und wird im Automatikmodus durch dieselbe
-Schutzmaske eingeschränkt wie die Löschung - sonst könnte ein dichter Kern
+Schutzmaske eingeschränkt wie die Bearbeitung - sonst könnte ein dichter Kern
 eines bewussten weichen Schattens/Glows fälschlich hart gemacht werden.
+ACHTUNG: Bei den Standardwerten (weak=254, near_opaque=242) und der
+Standard-Reihenfolge REMOVE_FIRST hat "volle Deckkraft setzen" praktisch
+keinen sichtbaren Effekt mehr, da "geringe Deckkraft bearbeiten" bereits
+(fast) den gesamten Wertebereich bis 254 abdeckt, bevor die Verstärkung an
+die Reihe kommt - für ein sichtbares Zusammenspiel beider Funktionen muss
+entweder der Schwellenwert von "geringe Deckkraft" unterhalb des Schwellenwerts
+von "volle Deckkraft" liegen, oder `threshold_order` auf STRENGTHEN_FIRST
+stehen (siehe unten).
 
 Beide Funktionen lassen sich unabhängig voneinander über
 `weak_alpha_threshold_enabled` bzw. `near_opaque_threshold_enabled`
@@ -33,7 +54,7 @@ unverändert zurück). Sind beide Pixel-Bedingungen für ein Pixel gleichzeitig
 erfüllt (nur bei ungewöhnlicher Konfiguration mit sich überschneidenden
 Schwellenwerten möglich), entscheidet `threshold_order`
 (`AlphaThresholdOrder`), welche Funktion zuerst läuft und damit "gewinnt":
-REMOVE_FIRST (Standard, bisheriges Verhalten) lässt die Löschung zuerst
+REMOVE_FIRST (Standard, bisheriges Verhalten) lässt die Bearbeitung zuerst
 laufen, STRENGTHEN_FIRST kehrt die Reihenfolge um. Bei nicht überschneidenden
 Schwellenwerten liefert jede Reihenfolge dasselbe Ergebnis. Die gemeinsame
 Anwendung beider Funktionen in der konfigurierten Reihenfolge kapselt
@@ -48,7 +69,7 @@ import numpy as np
 
 from src.config.defaults import AlphaThresholds, ProcessingSettings
 from src.core.analysis.alpha_analysis import compute_large_soft_region_mask, motif_edge_band_mask
-from src.models.enums import AlphaMode, AlphaThresholdOrder, ImageType
+from src.models.enums import AlphaMode, AlphaThresholdOrder, ImageType, WeakAlphaAction
 from src.models.report import ImageProcessingReport
 
 
@@ -74,16 +95,24 @@ def _mode_for_image_type(image_type: ImageType) -> AlphaMode:
 
 def _remove_weak_noise(
     alpha: np.ndarray, thresholds: AlphaThresholds, protect_mask: np.ndarray | None = None
-) -> tuple[np.ndarray, int]:
+) -> tuple[np.ndarray, np.ndarray]:
+    """Gibt (neue Alpha-Werte, Maske aller bearbeiteten Pixel) zurück. Die
+    Maske wird unverändert zurückgegeben, auch wenn `weak_alpha_threshold_enabled`
+    False ist (dann als reine Nullmaske) - der Aufrufer braucht sie zusätzlich,
+    um bei WeakAlphaAction.DELETE_PIXEL auch die RGB-Kanäle zu nullen (siehe
+    Moduldokumentation)."""
     if not thresholds.weak_alpha_threshold_enabled:
-        return alpha.copy(), 0
+        return alpha.copy(), np.zeros(alpha.shape, dtype=bool)
     out = alpha.copy()
-    # Inklusive Grenze wie gefordert: alpha <= threshold wird gelöscht (NICHT alpha < threshold).
-    weak_mask = (alpha > 0) & (alpha <= thresholds.weak_alpha_threshold)
+    # Inklusive Grenze wie gefordert: alpha <= threshold wird bearbeitet
+    # (NICHT alpha < threshold), alpha > threshold bleibt unverändert. Bewusst
+    # OHNE Ausnahme für bereits transparente Pixel (alpha == 0) - siehe
+    # Moduldokumentation zu WeakAlphaAction.DELETE_PIXEL.
+    weak_mask = alpha <= thresholds.weak_alpha_threshold
     if protect_mask is not None:
         weak_mask = weak_mask & ~protect_mask
     out[weak_mask] = 0
-    return out, int(weak_mask.sum())
+    return out, weak_mask
 
 
 def _strengthen_near_opaque(
@@ -103,16 +132,18 @@ def _strengthen_near_opaque(
 
 def _apply_alpha_thresholds(
     alpha: np.ndarray, thresholds: AlphaThresholds, protect_mask: np.ndarray | None = None
-) -> tuple[np.ndarray, int, int]:
-    """Wendet Löschen und Volldeckend-Setzen in der konfigurierten Reihenfolge an
-    (siehe Moduldokumentation zu `threshold_order`)."""
+) -> tuple[np.ndarray, np.ndarray, int]:
+    """Wendet Bearbeiten (geringe Deckkraft) und Volldeckend-Setzen in der
+    konfigurierten Reihenfolge an (siehe Moduldokumentation zu
+    `threshold_order`). Rückgabe: (neue Alpha-Werte, Maske der von "geringe
+    Deckkraft bearbeiten" betroffenen Pixel, Anzahl verstärkter Pixel)."""
     if thresholds.threshold_order == AlphaThresholdOrder.STRENGTHEN_FIRST:
         alpha, strengthened = _strengthen_near_opaque(alpha, thresholds, protect_mask)
-        alpha, removed = _remove_weak_noise(alpha, thresholds, protect_mask)
+        alpha, weak_mask = _remove_weak_noise(alpha, thresholds, protect_mask)
     else:
-        alpha, removed = _remove_weak_noise(alpha, thresholds, protect_mask)
+        alpha, weak_mask = _remove_weak_noise(alpha, thresholds, protect_mask)
         alpha, strengthened = _strengthen_near_opaque(alpha, thresholds, protect_mask)
-    return alpha, removed, strengthened
+    return alpha, weak_mask, strengthened
 
 
 def _hard_edge_threshold(alpha_u8: np.ndarray, thresholds: AlphaThresholds) -> int:
@@ -199,7 +230,8 @@ def _apply_soft_cleanup(
     original_alpha = rgba[:, :, 3]
     a = out[:, :, 3].copy()
 
-    a, removed, strengthened = _apply_alpha_thresholds(a, thresholds, protect_mask)
+    a, weak_mask, strengthened = _apply_alpha_thresholds(a, thresholds, protect_mask)
+    removed = int((weak_mask & (original_alpha > 0)).sum())
 
     mid_band_mask = (original_alpha > thresholds.mid_low_threshold) & (original_alpha <= thresholds.mid_high_threshold)
     edge_band = motif_edge_band_mask(original_alpha, thresholds)
@@ -216,6 +248,8 @@ def _apply_soft_cleanup(
     strengthened += int(boost_outside_edge.sum())
 
     out[:, :, 3] = a
+    if thresholds.weak_alpha_action == WeakAlphaAction.DELETE_PIXEL and weak_mask.any():
+        out[:, :, 0:3][weak_mask] = 0
     return out, removed, strengthened
 
 
@@ -246,7 +280,11 @@ def clean_alpha(
 
     if mode == AlphaMode.NOISE_ONLY:
         out = rgba.copy()
-        out[:, :, 3], removed, strengthened = _apply_alpha_thresholds(out[:, :, 3], thresholds, protect_mask)
+        original_alpha = out[:, :, 3].copy()
+        out[:, :, 3], weak_mask, strengthened = _apply_alpha_thresholds(out[:, :, 3], thresholds, protect_mask)
+        removed = int((weak_mask & (original_alpha > 0)).sum())
+        if thresholds.weak_alpha_action == WeakAlphaAction.DELETE_PIXEL and weak_mask.any():
+            out[:, :, 0:3][weak_mask] = 0
         result = AlphaCleanupResult(
             rgba=out, mode_used=mode, removed_pixel_count=removed, strengthened_pixel_count=strengthened
         )

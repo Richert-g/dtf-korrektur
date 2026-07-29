@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QApplication
 
 from src.app.ui.advanced_settings_dialog import AdvancedSettingsDialog
 from src.config.defaults import ProcessingSettings
-from src.models.enums import AlphaThresholdOrder
+from src.models.enums import AlphaThresholdOrder, WeakAlphaAction
 
 
 @pytest.fixture(scope="module")
@@ -25,7 +25,7 @@ def test_weak_threshold_range_excludes_255(qapp):
 def test_weak_threshold_default_matches_settings(qapp):
     settings = ProcessingSettings()
     dlg = AdvancedSettingsDialog(settings)
-    assert dlg.weak_threshold.value() == 241 == settings.alpha.weak_alpha_threshold
+    assert dlg.weak_threshold.value() == 254 == settings.alpha.weak_alpha_threshold
 
 
 def test_weak_threshold_percent_label_updates(qapp):
@@ -177,6 +177,57 @@ def test_apply_to_settings_persists_threshold_order(qapp):
     assert settings.alpha.threshold_order == AlphaThresholdOrder.STRENGTHEN_FIRST
 
 
+# --- Verarbeitungsmethode für "geringe Deckkraft bearbeiten" ---
+
+
+def test_weak_action_combo_defaults_to_set_transparent(qapp):
+    settings = ProcessingSettings()
+    dlg = AdvancedSettingsDialog(settings)
+    assert dlg.weak_action_combo.currentData() == WeakAlphaAction.SET_TRANSPARENT
+
+
+def test_weak_action_combo_reflects_saved_delete_pixel(qapp):
+    settings = ProcessingSettings()
+    settings.alpha.weak_alpha_action = WeakAlphaAction.DELETE_PIXEL
+    dlg = AdvancedSettingsDialog(settings)
+    assert dlg.weak_action_combo.currentData() == WeakAlphaAction.DELETE_PIXEL
+
+
+def test_apply_to_settings_persists_weak_action(qapp):
+    settings = ProcessingSettings()
+    dlg = AdvancedSettingsDialog(settings)
+
+    dlg.weak_action_combo.setCurrentIndex(list(WeakAlphaAction).index(WeakAlphaAction.DELETE_PIXEL))
+    dlg.apply_to_settings()
+
+    assert settings.alpha.weak_alpha_action == WeakAlphaAction.DELETE_PIXEL
+
+
+def test_weak_action_combo_disabled_when_checkbox_unchecked(qapp):
+    settings = ProcessingSettings()
+    dlg = AdvancedSettingsDialog(settings)
+
+    dlg.weak_enabled_checkbox.setChecked(False)
+
+    assert dlg.weak_action_combo.isEnabled() is False
+
+
+def test_weak_threshold_percent_label_mentions_deletion_for_delete_pixel_action(qapp):
+    settings = ProcessingSettings()
+    settings.alpha.weak_alpha_action = WeakAlphaAction.DELETE_PIXEL
+    dlg = AdvancedSettingsDialog(settings)
+    dlg.weak_threshold.setValue(200)
+    assert "gelöscht" in dlg.weak_threshold_percent_label.text()
+
+
+def test_weak_threshold_percent_label_mentions_transparent_for_set_transparent_action(qapp):
+    settings = ProcessingSettings()
+    settings.alpha.weak_alpha_action = WeakAlphaAction.SET_TRANSPARENT
+    dlg = AdvancedSettingsDialog(settings)
+    dlg.weak_threshold.setValue(200)
+    assert "transparent gemacht" in dlg.weak_threshold_percent_label.text()
+
+
 def test_apply_to_settings_survives_str_only_combo_data(qapp):
     """Regression: PySide6 kann bei str-Enums über currentData() ein reines
     str-Objekt statt des Enum-Members liefern (siehe apply_to_settings-
@@ -188,3 +239,13 @@ def test_apply_to_settings_survives_str_only_combo_data(qapp):
     dlg.apply_to_settings()
 
     assert settings.alpha.threshold_order == AlphaThresholdOrder.REMOVE_FIRST
+
+
+def test_apply_to_settings_weak_action_survives_str_only_combo_data(qapp):
+    settings = ProcessingSettings()
+    dlg = AdvancedSettingsDialog(settings)
+    dlg.weak_action_combo.setItemData(0, str(WeakAlphaAction.SET_TRANSPARENT.value))
+
+    dlg.apply_to_settings()
+
+    assert settings.alpha.weak_alpha_action == WeakAlphaAction.SET_TRANSPARENT

@@ -46,26 +46,46 @@ Im Modus `AUTO` wird anhand des erkannten Bildtyps automatisch gewählt:
 
 Alle Schwellenwerte kommen aus `AlphaThresholds` (`src/config/defaults.py`).
 
-### "Pixel löschen bis Alpha-Wert" (`weak_alpha_threshold`)
+### "Pixel mit geringer Deckkraft bearbeiten" (`weak_alpha_threshold`)
 
 Zentrale Einstellung in NOISE_ONLY und SOFT_CLEANUP: alle Pixel mit
-`0 <= Alpha <= Schwellenwert` werden vollständig transparent (inklusive
-Grenze: `alpha <= threshold`, nicht `alpha < threshold`). Standard: **241**
-(Bereich 0-254 in der Oberfläche; 255 ist nicht wählbar, da dadurch auch
-vollständig deckende Pixel gelöscht würden).
+`Alpha <= Schwellenwert` werden bearbeitet (inklusive Grenze:
+`alpha <= threshold`, nicht `alpha < threshold`; bewusst OHNE Ausnahme für
+bereits transparente Pixel, siehe unten), alle Pixel mit `Alpha >
+Schwellenwert` bleiben unverändert. Standard: **254** (Bereich 0-254 in der
+Oberfläche; 255 ist nicht wählbar, da dadurch auch vollständig deckende
+Pixel betroffen wären).
+
+Über `weak_alpha_action` (`WeakAlphaAction`) wird gesteuert, WIE die
+betroffenen Pixel bearbeitet werden: `SET_TRANSPARENT` (Standard) setzt nur
+den Alpha-Wert auf 0 (RGB bleibt erhalten), `DELETE_PIXEL` setzt zusätzlich
+auch die RGB-Kanäle auf 0 (keine Farbinformationen bleiben zurück - auch
+bei bereits vorher transparenten Pixeln, daher die fehlende
+`alpha > 0`-Ausnahme in der Auswahlmaske). Für die Berichtszählung
+("removed_pixel_count") werden trotzdem nur tatsächlich zuvor sichtbare
+Pixel gezählt.
 
 Die zugrunde liegende Funktion `_remove_weak_noise` wendet diesen Wert für
 sich genommen **global** auf das gesamte Bild an - sie kennt keine
-Bildbereiche. Da 241 bewusst sehr aggressiv ist, würde eine rein globale
+Bildbereiche. Da 254 bewusst sehr aggressiv ist, würde eine rein globale
 Anwendung auch bewusste weiche Schattenflächen zerstören. Deshalb berechnet
 `clean_alpha` **nur im Automatikmodus** (`settings.alpha_mode == AUTO`)
 zusätzlich eine Schutzmaske über
 `core.analysis.alpha_analysis.compute_large_soft_region_mask()`: große,
 nicht überwiegend am Motivrand liegende Halbtransparenz-Flächen (typisch für
-Schatten/Rauch/Glow) werden von der Löschung ausgenommen. Wählt der Benutzer
-dagegen manuell einen konkreten Modus (z. B. "Nur Störpixel entfernen"),
-gilt der Schwellenwert bewusst für das gesamte Bild - die Oberfläche zeigt
-dafür ab einem Wert von 220 eine Warnung an (`AdvancedSettingsDialog`).
+Schatten/Rauch/Glow) werden von der Bearbeitung ausgenommen. Wählt der
+Benutzer dagegen manuell einen konkreten Modus (z. B. "Nur Störpixel
+entfernen"), gilt der Schwellenwert bewusst für das gesamte Bild - die
+Oberfläche zeigt dafür ab einem Wert von 220 eine Warnung an
+(`AdvancedSettingsDialog`).
+
+**Achtung Standardwerte:** Bei `weak_alpha_threshold=254` und
+`near_opaque_threshold=242` (beide Standard) überschneiden sich die
+Wertebereiche - unter der Standard-Reihenfolge `AlphaThresholdOrder.REMOVE_FIRST`
+hat "Pixel ab Alpha-Wert auf volle Deckkraft setzen" dadurch praktisch
+keinen sichtbaren Effekt mehr, da die betroffenen Pixel schon vorher
+bearbeitet wurden (siehe Moduldocstring in `alpha_cleanup.py` für Details
+zur konfigurierbaren Reihenfolge über `threshold_order`).
 
 ## 6. Farboptimierung / ICC (`core/color/color_pipeline.py`)
 

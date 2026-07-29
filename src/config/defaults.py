@@ -7,25 +7,34 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from src.models.enums import AlphaMode, AlphaThresholdOrder, OutputFormat, RenderingIntent
+from src.models.enums import AlphaMode, AlphaThresholdOrder, OutputFormat, RenderingIntent, WeakAlphaAction
 
 
 @dataclass
 class AlphaThresholds:
     """Schwellenwerte für die Alpha-Bereinigung (Prompt Abschnitt 7)."""
 
-    # "Pixel löschen bis Alpha-Wert": alle Pixel mit 0 <= Alpha <= Schwellenwert
-    # werden vollständig transparent (inklusive Grenze: alpha <= threshold).
-    # Standard 241 ist bewusst aggressiv (siehe UI-Warnung ab 220) - im
+    # "Pixel mit geringer Deckkraft bearbeiten": alle Pixel mit Alpha <=
+    # Schwellenwert werden bearbeitet (inklusive Grenze), alle mit Alpha >
+    # Schwellenwert bleiben unverändert - bewusst OHNE Ausnahme für bereits
+    # transparente Pixel (Alpha == 0), damit "Pixel vollständig löschen" auch
+    # dort eventuell vorhandene RGB-Restwerte entfernen kann (siehe
+    # core.alpha.alpha_cleanup._remove_weak_noise).
+    # Standard 254 ist bewusst sehr aggressiv (siehe UI-Warnung ab 220) - im
     # Automatikmodus werden große, nicht am Motivrand liegende weiche Flächen
     # (z. B. Schatten/Glow) davon ausgenommen, siehe
     # core.analysis.alpha_analysis.compute_large_soft_region_mask().
     # Zulässiger Bereich in der Oberfläche: 0-254 (255 wäre "alles löschen").
-    weak_alpha_threshold: int = 241
-    # Schaltet "Pixel löschen bis Alpha-Wert" unabhängig vom gespeicherten
-    # Schwellenwert ein/aus - der Wert selbst bleibt beim Deaktivieren erhalten.
+    weak_alpha_threshold: int = 254
+    # Schaltet "Pixel mit geringer Deckkraft bearbeiten" unabhängig vom
+    # gespeicherten Schwellenwert ein/aus - der Wert selbst bleibt beim
+    # Deaktivieren erhalten.
     weak_alpha_threshold_enabled: bool = True
-    # Ab diesem Wert zeigt die Oberfläche eine Warnung vor aggressivem Löschen an
+    # Wie die betroffenen Pixel bearbeitet werden: nur der Alpha-Wert auf 0
+    # gesetzt (RGB bleibt erhalten) oder der Pixel vollständig gelöscht
+    # (RGB wird ebenfalls genullt, siehe WeakAlphaAction).
+    weak_alpha_action: WeakAlphaAction = WeakAlphaAction.SET_TRANSPARENT
+    # Ab diesem Wert zeigt die Oberfläche eine Warnung vor aggressivem Bearbeiten an
     weak_alpha_threshold_warning_from: int = 220
     # Untere Grenze für den mittleren Bereich (5-20 %)
     mid_low_threshold: int = 13
@@ -90,7 +99,7 @@ class GamutThresholds:
     # Ab diesem Out-of-Gamut-Flächenanteil wird perzeptiv statt farbmetrisch bevorzugt
     perceptual_preference_threshold_pct: float = 8.0
     # Maximale automatische Sättigungsreduktion (0-1, 0.3 = max. 30 %)
-    max_auto_saturation_reduction: float = 0.15
+    max_auto_saturation_reduction: float = 0.0
     # Iterationsgrenze für die iterative Farboptimierung
     max_optimization_iterations: int = 4
     # Abbruch, wenn die Verbesserung zwischen zwei Iterationen kleiner ist

@@ -16,11 +16,16 @@ def test_no_out_of_gamut_pixels_no_change():
 
 
 def test_saturated_out_of_gamut_pixel_gets_desaturated():
+    """Prüft den Reduktionsmechanismus selbst mit einer bewusst von Null
+    verschiedenen Konfiguration - der Standardwert von max_auto_saturation_reduction
+    ist inzwischen 0.0 (Funktion standardmäßig deaktiviert), das modulweite CFG
+    würde hier also nie eine Änderung zeigen."""
     rgb = np.zeros((2, 2, 3), dtype=np.uint8)
     rgb[:, :] = [255, 0, 0]  # sehr gesättigtes Rot
     delta = np.full((2, 2), 10.0)
     mask = np.ones((2, 2), dtype=bool)
-    result = reduce_saturation_pass(rgb, delta, mask, CFG)
+    cfg = GamutThresholds(max_auto_saturation_reduction=0.3)
+    result = reduce_saturation_pass(rgb, delta, mask, cfg)
     assert result.adjusted_pixel_count == 4
     # Sättigung muss abgenommen haben (G und B Kanal steigen bei Entsättigung von reinem Rot)
     assert result.rgb[0, 0, 1] > rgb[0, 0, 1] or result.rgb[0, 0, 2] > rgb[0, 0, 2]

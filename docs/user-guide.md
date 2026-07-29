@@ -192,7 +192,7 @@ Bestimmt, wie die Transparenzbereinigung im Detail abläuft:
 | Modus | Wirkung |
 |---|---|
 | **Auto** | wählt automatisch anhand des erkannten Bildtyps einen der drei folgenden Modi |
-| **Nur Störpixel entfernen** | minimaler Eingriff: nur die beiden Alpha-Schwellenwerte (löschen/volldeckend machen) werden angewendet |
+| **Nur Störpixel entfernen** | minimaler Eingriff: nur die beiden Alpha-Schwellenwerte (bearbeiten/volldeckend machen) werden angewendet |
 | **Sanfte Bereinigung** | zusätzlich zu den Schwellenwerten eine gezielte Kantenbehandlung im mittleren Alpha-Bereich (Rauschen am Rand entfernen, echte Halbtransparenz außerhalb des Rands verstärken) |
 | **Harte Kante** | binarisiert die gesamte Kante auf 0 oder 255 (automatische Otsu-Schwelle), inklusive Entfernen kleiner Pixelinseln und Schließen kleiner Löcher |
 
@@ -218,9 +218,8 @@ Farben reduzieren darf, die außerhalb des gewählten Zielfarbraums liegen
 Werte erlauben eine stärkere, proportional zur Abweichung skalierte
 Entsättigung). Wirkt nur zusätzlich zur eigentlichen ICC-Konvertierung und
 nur auf tatsächlich außerhalb des Zielfarbraums liegende Pixel - Hauttöne,
-neutrale Grauwerte und sehr dunkle Töne werden dabei ausgenommen. Bei 0
-findet keine zusätzliche Korrektur mehr statt (Standardverhalten des
-DTF-King-Presets).
+neutrale Grauwerte und sehr dunkle Töne werden dabei ausgenommen. **Standardwert: 0**
+(keine zusätzliche Korrektur, reines ICC-Ergebnis) - bei Bedarf manuell erhöhen.
 
 ### Rendering Intent & Schwarzpunktkompensation (Farbe-Reiter)
 
@@ -236,7 +235,7 @@ die manuelle Auswahl. **Schwarzpunktkompensation** verbessert die Zeichnung
 in dunklen Bildbereichen bei der Umrechnung, ohne die übrigen Farben zu
 verschieben - i. d. R. aktiviert lassen.
 
-### "Pixel mit geringer Deckkraft entfernen" und "... vollständig deckend setzen"
+### "Pixel mit geringer Deckkraft bearbeiten" und "... vollständig deckend setzen"
 
 Beide Funktionen lassen sich über eine eigene Checkbox **unabhängig
 voneinander** ein- und ausschalten. Ist eine Checkbox deaktiviert, wird das
@@ -245,16 +244,30 @@ erhalten und erscheint beim erneuten Aktivieren unverändert wieder - der
 Verarbeitungsschritt selbst wird bei Deaktivierung vollständig übersprungen
 (auch in Berichten taucht dann kein entsprechender Schritt mehr auf).
 
-**"Pixel mit geringer Deckkraft entfernen"** löscht alle Pixel mit Alpha-Wert
-0 bis einschließlich des eingestellten Schwellenwerts vollständig (0 =
-vollständig transparent, 255 = vollständig deckend). Zusätzlich wird eine
-Prozentangabe angezeigt (z. B. "241 von 255 - Pixel bis etwa 94,5 %
-Deckkraft werden gelöscht"). Standardwert: **241** (bewusst aggressiv),
-standardmäßig **aktiviert**. Wählbarer Bereich: 0-254 - 255 ist nicht
-wählbar, da dadurch auch vollständig deckende Pixel gelöscht würden.
+**"Pixel mit geringer Deckkraft bearbeiten"** bearbeitet alle Pixel mit
+einem Alpha-Wert von 0 bis einschließlich des eingestellten Schwellenwerts
+(0 = vollständig transparent, 255 = vollständig deckend). Alle Pixel mit
+einem höheren Alpha-Wert bleiben unverändert. Zusätzlich wird eine
+Prozentangabe angezeigt (z. B. "254 von 255 - Pixel bis etwa 99,6 %
+Deckkraft werden transparent gemacht/vollständig gelöscht", je nach
+gewählter Verarbeitungsmethode). Standardwert: **254** (bewusst sehr
+aggressiv), standardmäßig **aktiviert**. Wählbarer Bereich: 0-254 - 255 ist
+nicht wählbar, da dadurch auch vollständig deckende Pixel betroffen wären.
 
-Ab einem Wert von 220 erscheint der Hinweis: "Hoher Wert: Weiche Schatten,
-Rauch, Glow und geglättete Kanten können entfernt werden." Im
+Über das Auswahlfeld **"Verarbeitungsmethode"** wird festgelegt, WIE die
+betroffenen Pixel bearbeitet werden:
+
+- **"Transparenz auf 0 setzen"** (Standard): Der Pixel bleibt erhalten,
+  erhält jedoch einen Alpha-Wert von 0 - die ursprüngliche Farbe (RGB)
+  bleibt dabei im Bild gespeichert, ist aber unsichtbar.
+- **"Pixel vollständig löschen"**: Der Pixel wird vollständig entfernt -
+  sowohl der Alpha-Wert als auch die Farbinformationen (RGB) werden auf 0
+  gesetzt. Nützlich, wenn nachgelagerte Programme (z. B. ein DTF-RIP) auch
+  bei transparenten Pixeln vorhandene Restfarben unerwartet berücksichtigen
+  und dadurch Farbsäume/Ghosting verursachen könnten.
+
+Ab einem Schwellenwert von 220 erscheint der Hinweis: "Hoher Wert: Weiche
+Schatten, Rauch, Glow und geglättete Kanten können betroffen sein." Im
 **Automatikmodus** (Preset "DTF Auto" bzw. Alpha-Modus "Auto") schützt die
 Anwendung erkannte große, weiche Flächen (Schatten/Rauch/Glow) automatisch
 vor diesem Schwellenwert. Wird dagegen im Alpha-Modus **manuell** ein
@@ -276,18 +289,30 @@ Schutzmaske: erkannte große, weiche Flächen (Schatten/Rauch/Glow) werden
 weder gelöscht noch pauschal hart gemacht. Im **manuell** gewählten Modus
 gilt der jeweils aktivierte Schwellenwert für das gesamte Bild.
 
+**Wichtiger Hinweis zum Zusammenspiel beider Funktionen mit den
+Standardwerten**: Da der Standard-Schwellenwert für "geringe Deckkraft
+bearbeiten" (254) sehr nah am oberen Ende liegt und in der Standard-
+Reihenfolge zuerst läuft, deckt er praktisch den gesamten Wertebereich bis
+254 bereits ab - "hohe Deckkraft vollständig deckend setzen" (Standard-
+Schwellenwert 242) kommt dadurch mit den Standardwerten nie mehr zum
+Einsatz, da die betroffenen Pixel schon vorher bearbeitet wurden. Für ein
+sichtbares Zusammenspiel beider Funktionen entweder den Schwellenwert von
+"geringe Deckkraft bearbeiten" **unterhalb** des Schwellenwerts von "hohe
+Deckkraft" setzen, oder die Reihenfolge (siehe unten) auf "Zuerst
+volldeckend setzen" stellen.
+
 **Reihenfolge bei Überschneidung**: Über das Auswahlfeld "Reihenfolge bei
 Überschneidung" wird festgelegt, welche der beiden Funktionen zuerst läuft.
-Das wirkt sich nur aus, wenn die beiden Schwellenwerte sich überschneiden
-(z. B. "Pixel löschen bis Alpha-Wert" = 200 und "... volldeckend setzen" =
-150 - ein Pixel mit Alpha 180 erfüllt dann beide Bedingungen gleichzeitig).
-Bei den Standardwerten (241/242) kommt das nicht vor. Zwei Optionen:
+Das wirkt sich nur aus, wenn die beiden Schwellenwerte sich überschneiden -
+mit den Standardwerten (254/242) ist das inzwischen **der Regelfall**
+(siehe Hinweis oben), nicht mehr die Ausnahme. Zwei Optionen:
 
-- **Zuerst löschen, dann volldeckend setzen** (Standard, bisheriges
-  Verhalten): Das betroffene Pixel wird gelöscht (Alpha 0).
-- **Zuerst volldeckend setzen, dann löschen**: Das betroffene Pixel wird
+- **Zuerst bearbeiten, dann volldeckend setzen** (Standard, bisheriges
+  Verhalten): Das betroffene Pixel wird gemäß der gewählten
+  Verarbeitungsmethode bearbeitet (transparent gesetzt oder gelöscht).
+- **Zuerst volldeckend setzen, dann bearbeiten**: Das betroffene Pixel wird
   zuerst auf volle Deckkraft (255) gesetzt und ist danach kein Kandidat mehr
-  für die Löschung - es bleibt erhalten.
+  für die Bearbeitung - es bleibt voll deckend erhalten.
 
 ## Eigene ICC-Profile hinzufügen
 
@@ -419,6 +444,7 @@ Workflow, bei dem laufend neue Dateien in einem Ordner abgelegt werden
 - **Bereits gespeicherte Einstellungen** (`%LOCALAPPDATA%\DTFKorrektur\settings.json`)
   behalten beim Programm-Update ihren bisherigen Wert - z. B. übernimmt eine
   bereits existierende Installation nicht automatisch den neuen
-  Standardwert 241 für "Pixel löschen bis Alpha-Wert". Zum Zurücksetzen auf
-  die aktuellen Standardwerte die Datei löschen (App dabei geschlossen
-  lassen) oder den Wert manuell in den erweiterten Einstellungen anpassen.
+  Standardwert 254 für "Pixel mit geringer Deckkraft bearbeiten". Zum
+  Zurücksetzen auf die aktuellen Standardwerte die Datei löschen (App dabei
+  geschlossen lassen) oder den Wert manuell in den erweiterten Einstellungen
+  anpassen.

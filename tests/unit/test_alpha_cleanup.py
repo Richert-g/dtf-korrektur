@@ -2,7 +2,7 @@ import numpy as np
 
 from src.config.defaults import ProcessingSettings
 from src.core.alpha.alpha_cleanup import clean_alpha
-from src.models.enums import AlphaMode, AlphaThresholdOrder, ImageType
+from src.models.enums import AlphaMode, AlphaThresholdOrder, ImageType, WeakAlphaAction
 from tests.fixtures.synthetic_images import (
     make_large_soft_shadow,
     make_logo_with_white_halo,
@@ -16,18 +16,20 @@ def _arr(img):
 
 
 def test_noise_only_removes_only_weak_pixels():
-    """NOISE_ONLY ist ein reiner "Alpha <= Schwellenwert löschen"-Filter - die
-    Schwelle zum Volldeckend-Setzen wird hier bewusst auf 255 gesetzt (=
-    de facto deaktiviert), um die Löschung isoliert zu testen (siehe
+    """NOISE_ONLY ist ein reiner "Alpha <= Schwellenwert bearbeiten"-Filter -
+    die Schwelle zum Volldeckend-Setzen wird hier bewusst auf 255 gesetzt (=
+    de facto deaktiviert), um die Bearbeitung isoliert zu testen (siehe
     test_noise_only_strengthens_near_opaque_pixels für das Zusammenspiel
-    beider Schwellen mit Standardwerten)."""
+    beider Schwellen). weak_alpha_threshold wird hier bewusst auf 241 (statt
+    dem seit dieser Version aggressiveren Standardwert 254) gesetzt, damit
+    250 als "oberhalb" isoliert getestet werden kann."""
     arr = np.zeros((8, 8, 4), dtype=np.uint8)
     arr[:, :, 3] = 250  # oberhalb des Löschen-Schwellenwerts -> bleibt erhalten
     arr[0, 0, 3] = 3  # unterhalb des Löschen-Schwellenwerts -> wird gelöscht
     settings = ProcessingSettings()
     settings.alpha_mode = AlphaMode.NOISE_ONLY
+    settings.alpha.weak_alpha_threshold = 241
     settings.alpha.near_opaque_threshold = 255
-    assert settings.alpha.weak_alpha_threshold == 241
     result = clean_alpha(arr, ImageType.PHOTO, settings, report=None)
     assert result.rgba[0, 0, 3] == 0
     assert result.rgba[1, 1, 3] == 250  # unverändert
@@ -150,12 +152,12 @@ def test_soft_cleanup_preserves_true_midrange_alpha():
 
 
 def test_auto_mode_protects_large_soft_shadow_from_high_default_threshold():
-    """Kernanforderung: im Automatikmodus darf der aggressive Standardwert (241)
+    """Kernanforderung: im Automatikmodus darf der aggressive Standardwert (254)
     einen erkannten weichen Schatten nicht großflächig löschen."""
     arr = _arr(make_large_soft_shadow())
-    settings = ProcessingSettings()  # AUTO, weak_alpha_threshold=241 (Standard)
+    settings = ProcessingSettings()  # AUTO, weak_alpha_threshold=254 (Standard)
     assert settings.alpha_mode == AlphaMode.AUTO
-    assert settings.alpha.weak_alpha_threshold == 241
+    assert settings.alpha.weak_alpha_threshold == 254
 
     result = clean_alpha(arr, ImageType.SOFT_SHADOW, settings, report=None)
 
@@ -172,7 +174,7 @@ def test_manual_mode_applies_high_threshold_globally_without_protection():
     arr = _arr(make_large_soft_shadow())
     settings = ProcessingSettings()
     settings.alpha_mode = AlphaMode.NOISE_ONLY  # explizit gewählt, nicht AUTO
-    assert settings.alpha.weak_alpha_threshold == 241
+    assert settings.alpha.weak_alpha_threshold == 254
 
     result = clean_alpha(arr, ImageType.SOFT_SHADOW, settings, report=None)
 
@@ -252,16 +254,126 @@ def test_both_thresholds_disabled_leaves_alpha_completely_unchanged():
 def test_thresholds_independently_toggleable_in_soft_cleanup_mode():
     """Auch im Modus 'Sanfte Bereinigung' (verwendet dieselben zwei Funktionen
     intern über _apply_soft_cleanup) müssen beide Schaltflächen unabhängig
-    wirken."""
+    wirken. weak_alpha_threshold wird hier bewusst auf 241 (statt dem
+    aggressiveren Standardwert 254) gesetzt, damit 250 isoliert als "von
+    'geringe Deckkraft bearbeiten' nicht betroffen" getestet werden kann."""
     arr = np.zeros((8, 8, 4), dtype=np.uint8)
     arr[:, :, 3] = 250
     settings = ProcessingSettings()
     settings.alpha_mode = AlphaMode.SOFT_CLEANUP
+    settings.alpha.weak_alpha_threshold = 241
     settings.alpha.near_opaque_threshold_enabled = False
 
     result = clean_alpha(arr, ImageType.ILLUSTRATION, settings, report=None)
 
     assert (result.rgba[:, :, 3] == 250).all()
+
+
+def test_default_weak_threshold_makes_near_opaque_ineffective_under_remove_first():
+    """Dokumentiert eine bewusste Konsequenz der neuen Standardwerte (siehe
+    Moduldocstring 'ACHTUNG'): weak_alpha_threshold=254 deckt praktisch den
+    gesamten Wertebereich bis 254 ab. Unter der Standard-Reihenfolge
+    REMOVE_FIRST wird ein Pixel im "Verstärkungsfenster" von near_opaque_threshold
+    (Standard 242) daher bereits VOR der Verstärkung gelöscht - "volle
+    Deckkraft setzen" hat unter den Standardwerten dadurch keinen sichtbaren
+    Effekt mehr. Für ein Zusammenspiel beider Funktionen muss entweder der
+    Schwellenwert von "geringe Deckkraft bearbeiten" unterhalb des
+    Schwellenwerts von "volle Deckkraft setzen" liegen, oder threshold_order
+    auf STRENGTHEN_FIRST stehen (siehe test_strengthen_first_order_keeps_overlapping_pixel_opaque)."""
+    arr = np.zeros((4, 4, 4), dtype=np.uint8)
+    arr[:, :, 3] = 245  # läge im (unter den Standardwerten nicht mehr erreichbaren) Verstärkungsfenster
+    settings = ProcessingSettings()  # Standardwerte: weak=254, near_opaque=242, REMOVE_FIRST
+    settings.alpha_mode = AlphaMode.NOISE_ONLY
+
+    result = clean_alpha(arr, ImageType.PHOTO, settings, report=None)
+
+    assert (result.rgba[:, :, 3] == 0).all()  # gelöscht statt volldeckend gemacht
+    assert result.strengthened_pixel_count == 0
+
+
+# --- Verarbeitungsmethode für "geringe Deckkraft bearbeiten" ---
+
+
+def test_default_action_is_set_transparent():
+    settings = ProcessingSettings()
+    assert settings.alpha.weak_alpha_action == WeakAlphaAction.SET_TRANSPARENT
+
+
+def test_set_transparent_action_keeps_rgb_unchanged():
+    arr = np.zeros((4, 4, 4), dtype=np.uint8)
+    arr[:, :, 0:3] = [200, 100, 50]
+    arr[:, :, 3] = 10
+    settings = ProcessingSettings()
+    settings.alpha_mode = AlphaMode.NOISE_ONLY
+    settings.alpha.weak_alpha_action = WeakAlphaAction.SET_TRANSPARENT
+
+    result = clean_alpha(arr, ImageType.PHOTO, settings, report=None)
+
+    assert (result.rgba[:, :, 3] == 0).all()
+    assert np.array_equal(result.rgba[:, :, 0:3], arr[:, :, 0:3])  # RGB bleibt erhalten
+
+
+def test_delete_pixel_action_zeros_rgb_too():
+    arr = np.zeros((4, 4, 4), dtype=np.uint8)
+    arr[:, :, 0:3] = [200, 100, 50]
+    arr[:, :, 3] = 10
+    settings = ProcessingSettings()
+    settings.alpha_mode = AlphaMode.NOISE_ONLY
+    settings.alpha.weak_alpha_action = WeakAlphaAction.DELETE_PIXEL
+
+    result = clean_alpha(arr, ImageType.PHOTO, settings, report=None)
+
+    assert (result.rgba[:, :, 3] == 0).all()
+    assert (result.rgba[:, :, 0:3] == 0).all()  # keine Farbinformationen bleiben zurück
+
+
+def test_delete_pixel_action_also_clears_rgb_of_already_transparent_pixels():
+    """Anders als SET_TRANSPARENT gilt DELETE_PIXEL bewusst auch für Pixel, die
+    schon vorher Alpha=0 hatten (siehe Moduldokumentation zur fehlenden
+    alpha>0-Ausnahme) - so werden auch dort eventuell vorhandene RGB-
+    Restwerte entfernt."""
+    arr = np.zeros((2, 2, 4), dtype=np.uint8)
+    arr[:, :, 0:3] = [123, 45, 67]
+    arr[:, :, 3] = 0  # bereits vollständig transparent, mit Restfarbe
+    settings = ProcessingSettings()
+    settings.alpha_mode = AlphaMode.NOISE_ONLY
+    settings.alpha.weak_alpha_action = WeakAlphaAction.DELETE_PIXEL
+
+    result = clean_alpha(arr, ImageType.PHOTO, settings, report=None)
+
+    assert (result.rgba[:, :, 0:3] == 0).all()
+    assert result.removed_pixel_count == 0  # nicht als "entfernt" gezählt - war schon unsichtbar
+
+
+def test_delete_pixel_action_also_applies_in_soft_cleanup_mode():
+    arr = np.zeros((16, 16, 4), dtype=np.uint8)
+    arr[:, :, 0:3] = [10, 20, 30]
+    arr[:, :, 3] = 5
+    settings = ProcessingSettings()
+    settings.alpha_mode = AlphaMode.SOFT_CLEANUP
+    settings.alpha.weak_alpha_action = WeakAlphaAction.DELETE_PIXEL
+
+    result = clean_alpha(arr, ImageType.ILLUSTRATION, settings, report=None)
+
+    assert (result.rgba[:, :, 3] == 0).all()
+    assert (result.rgba[:, :, 0:3] == 0).all()
+
+
+def test_weak_threshold_boundary_alpha_above_threshold_stays_untouched_including_rgb():
+    """Alpha > Schwellenwert muss unabhängig von der Verarbeitungsmethode
+    vollständig unverändert bleiben (weder Alpha noch RGB)."""
+    arr = np.zeros((2, 2, 4), dtype=np.uint8)
+    arr[:, :, 0:3] = [11, 22, 33]
+    arr[:, :, 3] = 100
+    settings = ProcessingSettings()
+    settings.alpha_mode = AlphaMode.NOISE_ONLY
+    settings.alpha.weak_alpha_threshold = 99
+    settings.alpha.weak_alpha_action = WeakAlphaAction.DELETE_PIXEL
+    settings.alpha.near_opaque_threshold_enabled = False
+
+    result = clean_alpha(arr, ImageType.PHOTO, settings, report=None)
+
+    assert np.array_equal(result.rgba, arr)
 
 
 # --- Konfigurierbare Reihenfolge bei sich überschneidenden Schwellenwerten ---
@@ -311,10 +423,13 @@ def test_strengthen_first_order_keeps_overlapping_pixel_opaque():
 
 
 def test_threshold_order_has_no_effect_without_overlapping_thresholds():
-    """Bei nicht überschneidenden Schwellenwerten (Standardkonfiguration) liefern
-    beide Reihenfolgen dasselbe Ergebnis."""
+    """Bei nicht überschneidenden Schwellenwerten liefern beide Reihenfolgen
+    dasselbe Ergebnis. Seit dem aggressiveren Standardwert für "geringe
+    Deckkraft bearbeiten" (254) überschneiden sich die STANDARD-Schwellenwerte
+    (254/242) tatsächlich - hier daher bewusst ein niedrigerer, nicht
+    überschneidender Wert (100 < 242) gesetzt."""
     arr = np.zeros((8, 8, 4), dtype=np.uint8)
-    arr[:, :, 3] = 100
+    arr[:, :, 3] = 150
     arr[0, 0, 3] = 3
     arr[0, 1, 3] = 250
 
@@ -322,6 +437,7 @@ def test_threshold_order_has_no_effect_without_overlapping_thresholds():
     for order in AlphaThresholdOrder:
         settings = ProcessingSettings()
         settings.alpha_mode = AlphaMode.NOISE_ONLY
+        settings.alpha.weak_alpha_threshold = 100
         settings.alpha.threshold_order = order
         results[order] = clean_alpha(arr, ImageType.PHOTO, settings, report=None).rgba[:, :, 3]
 
@@ -349,6 +465,7 @@ def test_disabling_one_threshold_does_not_affect_the_other():
     arr[1, 1, 3] = 250  # sollte NICHT mehr volldeckend gemacht werden
     settings = ProcessingSettings()
     settings.alpha_mode = AlphaMode.NOISE_ONLY
+    settings.alpha.weak_alpha_threshold = 241  # nicht der (jetzt aggressivere) Standardwert 254
     settings.alpha.near_opaque_threshold_enabled = False
 
     result = clean_alpha(arr, ImageType.PHOTO, settings, report=None)

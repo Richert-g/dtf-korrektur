@@ -18,11 +18,16 @@ from PySide6.QtWidgets import (
 )
 
 from src.config.defaults import AlphaThresholds, ProcessingSettings
-from src.models.enums import AlphaMode, AlphaThresholdOrder, RenderingIntent
+from src.models.enums import AlphaMode, AlphaThresholdOrder, RenderingIntent, WeakAlphaAction
 
 ALPHA_THRESHOLD_ORDER_LABELS = {
-    AlphaThresholdOrder.REMOVE_FIRST: "Zuerst löschen, dann volldeckend setzen",
-    AlphaThresholdOrder.STRENGTHEN_FIRST: "Zuerst volldeckend setzen, dann löschen",
+    AlphaThresholdOrder.REMOVE_FIRST: "Zuerst bearbeiten, dann volldeckend setzen",
+    AlphaThresholdOrder.STRENGTHEN_FIRST: "Zuerst volldeckend setzen, dann bearbeiten",
+}
+
+WEAK_ALPHA_ACTION_LABELS = {
+    WeakAlphaAction.SET_TRANSPARENT: "Transparenz auf 0 setzen",
+    WeakAlphaAction.DELETE_PIXEL: "Pixel vollständig löschen",
 }
 
 
@@ -71,13 +76,39 @@ class AdvancedSettingsDialog(QDialog):
         weak_layout.setContentsMargins(0, 4, 0, 4)
         weak_layout.setSpacing(2)
 
-        self.weak_enabled_checkbox = QCheckBox("Pixel mit geringer Deckkraft entfernen")
+        self.weak_enabled_checkbox = QCheckBox("Pixel mit geringer Deckkraft bearbeiten")
         self.weak_enabled_checkbox.setChecked(a.weak_alpha_threshold_enabled)
         self.weak_enabled_checkbox.setToolTip(
-            "Löscht Pixel mit geringer Deckkraft vollständig. Bei Deaktivierung bleibt der "
-            "eingestellte Schwellenwert erhalten, der Verarbeitungsschritt wird aber übersprungen."
+            "Bearbeitet Pixel mit geringer Deckkraft gemäß der gewählten Verarbeitungsmethode. Bei "
+            "Deaktivierung bleiben Schwellenwert und Methode erhalten, der Verarbeitungsschritt wird "
+            "aber übersprungen."
         )
         weak_layout.addWidget(self.weak_enabled_checkbox)
+
+        weak_action_row = QHBoxLayout()
+        weak_action_row.setContentsMargins(20, 0, 0, 0)
+        weak_action_row.addWidget(QLabel("Verarbeitungsmethode:"))
+        self.weak_action_combo = QComboBox()
+        for action in WeakAlphaAction:
+            self.weak_action_combo.addItem(WEAK_ALPHA_ACTION_LABELS[action], action)
+        self.weak_action_combo.setCurrentIndex(list(WeakAlphaAction).index(a.weak_alpha_action))
+        self.weak_action_combo.setToolTip(
+            "'Transparenz auf 0 setzen': Pixel bleibt erhalten, nur der Alpha-Wert wird 0.\n"
+            "'Pixel vollständig löschen': Pixel wird vollständig entfernt, es bleiben keine "
+            "Farbinformationen (RGB) zurück."
+        )
+        weak_action_row.addWidget(self.weak_action_combo)
+        weak_action_row.addStretch(1)
+        weak_layout.addLayout(weak_action_row)
+
+        weak_action_help = QLabel(
+            "„Transparenz auf 0 setzen“: Der Pixel bleibt erhalten, erhält jedoch einen Alpha-Wert von 0.\n"
+            "„Pixel vollständig löschen“: Der Pixel wird vollständig entfernt und enthält keine "
+            "Farbinformationen mehr."
+        )
+        weak_action_help.setWordWrap(True)
+        weak_action_help.setContentsMargins(20, 0, 0, 0)
+        weak_layout.addWidget(weak_action_help)
 
         weak_threshold_row = QHBoxLayout()
         weak_threshold_row.setContentsMargins(20, 0, 0, 0)
@@ -86,8 +117,9 @@ class AdvancedSettingsDialog(QDialog):
             self.WEAK_ALPHA_THRESHOLD_MIN,
             self.WEAK_ALPHA_THRESHOLD_MAX,
             a.weak_alpha_threshold,
-            "Alle Pixel mit Alpha 0 bis einschließlich diesem Wert werden vollständig transparent "
-            "(0 = vollständig transparent, 255 = vollständig deckend).",
+            "Alle Pixel mit Alpha 0 bis einschließlich diesem Wert werden bearbeitet, alle Pixel mit "
+            "einem höheren Alpha-Wert bleiben unverändert (0 = vollständig transparent, "
+            "255 = vollständig deckend).",
         )
         weak_threshold_row.addWidget(self.weak_threshold)
         weak_threshold_row.addStretch(1)
@@ -95,7 +127,8 @@ class AdvancedSettingsDialog(QDialog):
 
         weak_help = QLabel(
             "Alle Pixel mit einem Alpha-Wert von 0 bis einschließlich des eingestellten Werts werden "
-            "vollständig transparent.\n0 = vollständig transparent, 255 = vollständig deckend"
+            "bearbeitet. Alle Pixel mit einem Alpha-Wert ÜBER dem Schwellenwert bleiben unverändert.\n"
+            "0 = vollständig transparent, 255 = vollständig deckend"
         )
         weak_help.setWordWrap(True)
         weak_help.setContentsMargins(20, 0, 0, 0)
@@ -113,9 +146,12 @@ class AdvancedSettingsDialog(QDialog):
         weak_layout.addWidget(self.weak_threshold_warning_label)
 
         self.weak_threshold.valueChanged.connect(self._update_weak_threshold_info)
+        self.weak_action_combo.currentIndexChanged.connect(self._on_weak_action_changed)
         self._update_weak_threshold_info(self.weak_threshold.value())
         self.weak_enabled_checkbox.toggled.connect(self.weak_threshold.setEnabled)
+        self.weak_enabled_checkbox.toggled.connect(self.weak_action_combo.setEnabled)
         self.weak_threshold.setEnabled(a.weak_alpha_threshold_enabled)
+        self.weak_action_combo.setEnabled(a.weak_alpha_threshold_enabled)
 
         form.addRow(weak_container)
 
@@ -190,14 +226,22 @@ class AdvancedSettingsDialog(QDialog):
 
         return w
 
+    def _on_weak_action_changed(self) -> None:
+        self._update_weak_threshold_info(self.weak_threshold.value())
+
     def _update_weak_threshold_info(self, value: int) -> None:
+        # WeakAlphaAction erbt von str: QComboBox.currentData() liefert dafür in
+        # PySide6 mitunter ein reines str-Objekt statt des Enum-Members zurück -
+        # ueber WeakAlphaAction(...) re-wrappen statt z. B. per == zu vergleichen.
+        action = WeakAlphaAction(self.weak_action_combo.currentData())
+        verb = "vollständig gelöscht" if action == WeakAlphaAction.DELETE_PIXEL else "transparent gemacht"
         percent = value / 255 * 100
         self.weak_threshold_percent_label.setText(
-            f"{value} von 255 – Pixel bis etwa {percent:.1f} % Deckkraft werden gelöscht"
+            f"{value} von 255 – Pixel bis etwa {percent:.1f} % Deckkraft werden {verb}"
         )
         if value >= self.WEAK_ALPHA_THRESHOLD_WARNING_FROM:
             self.weak_threshold_warning_label.setText(
-                "Hoher Wert: Weiche Schatten, Rauch, Glow und geglättete Kanten können entfernt werden."
+                "Hoher Wert: Weiche Schatten, Rauch, Glow und geglättete Kanten können betroffen sein."
             )
             self.weak_threshold_warning_label.show()
         else:
@@ -321,6 +365,7 @@ class AdvancedSettingsDialog(QDialog):
         self.settings.alpha_mode = AlphaMode(self.alpha_mode_combo.currentData())
         a.weak_alpha_threshold = self.weak_threshold.value()
         a.weak_alpha_threshold_enabled = self.weak_enabled_checkbox.isChecked()
+        a.weak_alpha_action = WeakAlphaAction(self.weak_action_combo.currentData())
         a.near_opaque_threshold = self.near_opaque_threshold.value()
         a.near_opaque_threshold_enabled = self.near_opaque_enabled_checkbox.isChecked()
         a.threshold_order = AlphaThresholdOrder(self.threshold_order_combo.currentData())

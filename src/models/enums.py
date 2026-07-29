@@ -32,6 +32,14 @@ class AlphaThresholdOrder(str, Enum):
     STRENGTHEN_FIRST = "strengthen_first"
 
 
+class WeakAlphaAction(str, Enum):
+    """Wie mit Pixeln umgegangen wird, deren Alpha-Wert kleiner oder gleich dem
+    "geringe Deckkraft"-Schwellenwert ist (siehe AlphaThresholds.weak_alpha_action)."""
+
+    SET_TRANSPARENT = "set_transparent"  # Pixel bleibt erhalten, Alpha wird 0
+    DELETE_PIXEL = "delete_pixel"  # Pixel wird vollständig entfernt (Alpha UND RGB genullt)
+
+
 class RenderingIntent(str, Enum):
     PERCEPTUAL = "perceptual"
     RELATIVE_COLORIMETRIC = "relative_colorimetric"

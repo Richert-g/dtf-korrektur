@@ -4,7 +4,7 @@ import pytest
 
 from src.config.config_manager import settings_from_dict, settings_from_dict_strict, settings_to_dict
 from src.config.defaults import ProcessingSettings
-from src.models.enums import AlphaMode, AlphaThresholdOrder, RenderingIntent
+from src.models.enums import AlphaMode, AlphaThresholdOrder, RenderingIntent, WeakAlphaAction
 
 
 def test_roundtrip_default_settings():
@@ -54,6 +54,18 @@ def test_roundtrip_threshold_order():
     restored = settings_from_dict(json.loads(json_str))
 
     assert restored.alpha.threshold_order == AlphaThresholdOrder.STRENGTHEN_FIRST
+
+
+def test_roundtrip_weak_alpha_action():
+    settings = ProcessingSettings()
+    assert settings.alpha.weak_alpha_action == WeakAlphaAction.SET_TRANSPARENT
+    settings.alpha.weak_alpha_action = WeakAlphaAction.DELETE_PIXEL
+
+    data = settings_to_dict(settings)
+    json_str = json.dumps(data)
+    restored = settings_from_dict(json.loads(json_str))
+
+    assert restored.alpha.weak_alpha_action == WeakAlphaAction.DELETE_PIXEL
 
 
 def test_settings_from_dict_falls_back_to_defaults_on_malformed_data():
